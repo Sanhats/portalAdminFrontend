@@ -1178,29 +1178,7 @@ export default function ProductsPage() {
 
         {/* Toggle Cargar Todos - Al final de la página */}
         <div className="flex justify-center items-center gap-3 pt-6">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setLoadAllProducts(!loadAllProducts);
-              setPage(1); // Resetear a página 1 al cambiar de modo
-            }}
-            className="border-white/20 text-white/80 hover:text-white"
-          >
-            <input
-              type="checkbox"
-              checked={loadAllProducts}
-              onChange={() => {}}
-              onClick={(e) => {
-                e.stopPropagation();
-                setLoadAllProducts(!loadAllProducts);
-                setPage(1);
-              }}
-              className="h-4 w-4 rounded border-white/20 bg-white/[0.05] checked:bg-white checked:border-white cursor-pointer mr-2"
-            />
-            Cargar todos los productos
-          </Button>
+          
           {loadAllProducts && allProducts.length > 0 && (
             <span className="text-xs text-white/50">
               ({allProducts.length} productos cargados)
