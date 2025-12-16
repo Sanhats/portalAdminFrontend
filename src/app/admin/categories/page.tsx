@@ -150,33 +150,9 @@ export default function CategoriesPage() {
     [categories, search]
   );
 
-  const totalCategories = categories.length;
-
   return (
     <DashboardLayout>
       <div className="space-y-10">
-        {/* Header Section */}
-        <div className="space-y-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="space-y-4">
-              <h1 className="font-serif text-[28px] sm:text-[36px] lg:text-[44px] font-semibold tracking-[-0.03em] text-white leading-[1.1]">
-                Categorías de productos
-              </h1>
-              <div className="ornamental-divider w-24" />
-              <p className="text-[15px] font-light text-white/45 leading-relaxed tracking-[-0.005em] max-w-xl">
-                Organiza tu catálogo en categorías claras para facilitar la navegación en la tienda.
-              </p>
-            </div>
-            <Button
-              onClick={openCreateModal}
-              className="bg-white/[0.12] hover:bg-white/[0.16] backdrop-blur-md border border-white/[0.15] text-white shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-all duration-300 hover:shadow-[0_12px_40px_rgba(0,0,0,0.5)] rounded-xl px-5 py-2.5 h-auto"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Nueva categoría
-            </Button>
-          </div>
-        </div>
-
         {/* Mensajes de éxito y error */}
         {success && (
           <div className="mb-2 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100 backdrop-blur-xl">
@@ -189,61 +165,15 @@ export default function CategoriesPage() {
           </div>
         )}
 
-        {/* Stats Overview */}
-        <div className="grid gap-6 sm:grid-cols-3">
-          <div className="overflow-hidden rounded-2xl bg-white/[0.03] backdrop-blur-2xl border border-white/[0.06] shadow-[0_20px_60px_rgba(0,0,0,0.5)] p-6 transition-all duration-300 hover:shadow-[0_24px_72px_rgba(0,0,0,0.6)] hover:border-white/[0.1]">
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-[14px] bg-white/[0.06] backdrop-blur-md icon-container">
-                <GridIcon className="h-6 w-6 text-white/80" />
-              </div>
-              <div>
-                <p className="text-[13px] font-medium text-white/50 tracking-[-0.005em]">
-                  Total categorías
-                </p>
-                <p className="font-serif text-[32px] font-semibold text-white tracking-[-0.02em] leading-none mt-1">
-                  {totalCategories}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="overflow-hidden rounded-2xl bg-white/[0.03] backdrop-blur-2xl border border-white/[0.06] shadow-[0_20px_60px_rgba(0,0,0,0.5)] p-6 transition-all duration-300 hover:shadow-[0_24px_72px_rgba(0,0,0,0.6)] hover:border-white/[0.1]">
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-[14px] bg-white/[0.06] backdrop-blur-md icon-container">
-                <GridIcon className="h-6 w-6 text-white/80" />
-              </div>
-              <div>
-                <p className="text-[13px] font-medium text-white/50 tracking-[-0.005em]">
-                  Categorías activas
-                </p>
-                <p className="font-serif text-[32px] font-semibold text-white tracking-[-0.02em] leading-none mt-1">
-                  {totalCategories}
-                </p>
-                <p className="mt-1 text-[11px] text-white/40">
-                  No hay estadísticas por el momento
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="overflow-hidden rounded-2xl bg-white/[0.03] backdrop-blur-2xl border border-white/[0.06] shadow-[0_20px_60px_rgba(0,0,0,0.5)] p-6 transition-all duration-300 hover:shadow-[0_24px_72px_rgba(0,0,0,0.6)] hover:border-white/[0.1]">
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-[14px] bg-white/[0.06] backdrop-blur-md icon-container">
-                <GridIcon className="h-6 w-6 text-white/80" />
-              </div>
-              <div>
-                <p className="text-[13px] font-medium text-white/50 tracking-[-0.005em]">
-                  Total de productos
-                </p>
-                <p className="font-serif text-[32px] font-semibold text-white tracking-[-0.02em] leading-none mt-1">
-                  -
-                </p>
-                <p className="mt-1 text-[11px] text-white/40">
-                  No hay estadísticas por el momento
-                </p>
-              </div>
-            </div>
-          </div>
+        {/* Header Section - Botón centrado */}
+        <div className="flex justify-center">
+          <Button
+            onClick={openCreateModal}
+            className="bg-white/[0.12] hover:bg-white/[0.16] backdrop-blur-md border border-white/[0.15] text-white shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-all duration-300 hover:shadow-[0_12px_40px_rgba(0,0,0,0.5)] rounded-xl px-6 py-3 h-auto text-base font-medium"
+          >
+            <Plus className="mr-2 h-5 w-5" />
+            Nueva categoría
+          </Button>
         </div>
 
         {/* Search */}
@@ -260,19 +190,6 @@ export default function CategoriesPage() {
 
         {/* Categories Grid */}
         <div className="space-y-5">
-          <div>
-            <h2 className="font-serif text-[28px] font-semibold text-white tracking-[-0.02em] leading-tight">
-              Todas las categorías
-            </h2>
-            <p className="mt-2 text-[14px] font-light text-white/45 tracking-[-0.005em]">
-              {loading
-                ? "Cargando categorías..."
-                : `${filteredCategories.length} categoría${
-                    filteredCategories.length === 1 ? "" : "s"
-                  } encontradas`}
-            </p>
-          </div>
-
           {loading ? (
             <div className="p-8 text-center text-white/60">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-white/70"></div>

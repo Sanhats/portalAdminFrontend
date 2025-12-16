@@ -132,6 +132,7 @@ class ApiClient {
     categorySlug?: string;
     isFeatured?: boolean;
     search?: string;
+    status?: string;
   }) {
     const query = new URLSearchParams();
     if (params) {
@@ -165,6 +166,34 @@ class ApiClient {
 
   async deleteProduct(id: string) {
     return this.request(`/products/${id}`, { method: "DELETE" });
+  }
+
+  // Stock Management
+  async adjustStock(productId: string, adjustment: { quantity: number; reason?: string }) {
+    return this.request(`/products/${productId}/stock`, {
+      method: "POST",
+      body: JSON.stringify(adjustment),
+    });
+  }
+
+  async getStockHistory(productId: string) {
+    return this.request(`/products/${productId}/stock/history`);
+  }
+
+  // Product Ordering
+  async updateProductsOrder(products: Array<{ id: string; position: number }>) {
+    return this.request("/products/order", {
+      method: "PUT",
+      body: JSON.stringify({ products }),
+    });
+  }
+
+  // Toggle Featured
+  async toggleFeatured(productId: string, isFeatured: boolean) {
+    return this.request(`/products/${productId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ is_featured: isFeatured }),
+    });
   }
 
   // Product Images

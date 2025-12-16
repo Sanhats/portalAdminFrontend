@@ -48,6 +48,7 @@ export default function ProductsPage() {
       const params: any = {
         page,
         limit,
+        status: "active", // Solo mostrar productos activos en la tienda pública
       };
       
       // Usar categoryId para filtrar (el backend ahora lo soporta)

@@ -1,13 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Search, Plus, X, Upload, AlertTriangle, Trash2, Zap, FileText, FileSpreadsheet, CheckCircle2, Loader2 } from "lucide-react";
+import { Search, Plus, X, Upload, AlertTriangle, Trash2, Zap, FileText, FileSpreadsheet, CheckCircle2, Loader2, Minus, History, ArrowUp, ArrowDown, Star } from "lucide-react";
 
 import { api } from "@/lib/api-client";
 import Notification from "@/components/Notification";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { DataTable } from "@/components/data-table";
-import { PackageIcon } from "@/components/icons/custom-icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +26,7 @@ interface Product {
   isFeatured?: boolean;
   status?: ProductStatus;
   variants?: Variant[];
+  position?: number; // Para ordenamiento manual
 }
 
 interface Variant {
@@ -57,6 +57,8 @@ interface TableProduct {
   price: string;
   stock: number;
   status: TableStatus;
+  isFeatured: boolean;
+  position?: number;
   raw: Product;
 }
 
@@ -113,6 +115,17 @@ export default function ProductsPage() {
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [csvPreview, setCsvPreview] = useState<CSVRow[]>([]);
   const [csvLoading, setCsvLoading] = useState(false);
+
+  // Stock Management
+  const [stockAdjustmentModal, setStockAdjustmentModal] = useState<{ product: Product | null; open: boolean }>({ product: null, open: false });
+  const [stockAdjustment, setStockAdjustment] = useState({ quantity: 0, reason: "" });
+  const [adjustingStock, setAdjustingStock] = useState(false);
+  const [stockHistoryModal, setStockHistoryModal] = useState<{ product: Product | null; open: boolean }>({ product: null, open: false });
+  const [stockHistory, setStockHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  // Product Featured
+  const [togglingFeatured, setTogglingFeatured] = useState<string | null>(null);
 
   const limit = 50; // Límite por página (paginación server-side)
 
@@ -194,6 +207,47 @@ export default function ProductsPage() {
         
         // Usar nameInternal como fallback si name no está disponible
         const productName = product.name || product.nameInternal || product.name_internal || "Sin nombre";
+
+        // 1) Intentar usar status del backend si existe (más directo)
+        const backendStatusRaw: string | undefined =
+          product.status ||
+          product.product_status ||
+          product.state ||
+          product.visibility;
+
+        let status: ProductStatus = "active";
+
+        if (backendStatusRaw) {
+          const normalizedBackendStatus = backendStatusRaw.toString().toLowerCase();
+          if (normalizedBackendStatus === "draft" || normalizedBackendStatus === "borrador" || normalizedBackendStatus === "inactive") {
+            status = "draft";
+          } else if (normalizedBackendStatus === "hidden" || normalizedBackendStatus === "oculto") {
+            status = "hidden";
+          } else {
+            status = "active";
+          }
+        } else {
+          // 2) Si no hay status explícito, mapear flags del backend a nuestro status interno
+          const isActive = typeof product.is_active === "boolean"
+            ? product.is_active
+            : typeof product.isActive === "boolean"
+            ? product.isActive
+            : true;
+
+          const isVisible = typeof product.is_visible === "boolean"
+            ? product.is_visible
+            : typeof product.isVisible === "boolean"
+            ? product.isVisible
+            : true;
+
+          if (!isActive) {
+            status = "draft";
+          } else if (!isVisible) {
+            status = "hidden";
+          } else {
+            status = "active";
+          }
+        }
         
         return {
           id: product.id,
@@ -202,10 +256,11 @@ export default function ProductsPage() {
           stock: product.stock,
           description: product.description,
           isFeatured: product.is_featured || product.isFeatured || false,
-          status: product.status || "active",
+          status,
           variants: product.variants || [],
           image: imageUrl,
           category: category,
+          position: typeof product.position === "number" ? product.position : undefined,
         };
       });
       
@@ -444,23 +499,30 @@ export default function ProductsPage() {
       const slug = formData.slug || generateSlug(formData.name);
       const normalizedCategoryId = formData.categoryId.trim();
 
-      // Generar SKU y nameInternal si no están presentes
-      const sku = generateSlug(formData.name).toUpperCase().substring(0, 20);
-      const nameInternal = formData.name;
+      // Usar directamente el status que el backend entiende: "draft" | "active" | "hidden"
+      const currentStatus: ProductStatus = (formData.status || "active") as ProductStatus;
 
       const productData: any = {
         name: formData.name,
-        nameInternal: nameInternal,
-        sku: sku,
-        slug: slug,
         price: parseFloat(formData.price),
         stock: parseInt(formData.stock),
         description: formData.description || "",
         is_featured: formData.isFeatured,
-        status: formData.status,
+        status: currentStatus,
         categoryId: normalizedCategoryId,
         category_id: normalizedCategoryId,
       };
+
+      // Solo agregar slug si se proporcionó uno nuevo o si es creación
+      if (formData.slug || !editingProduct) {
+        productData.slug = slug;
+      }
+
+      // Solo generar SKU y nameInternal si es un producto nuevo
+      if (!editingProduct) {
+        productData.sku = generateSlug(formData.name).toUpperCase().substring(0, 20);
+        productData.nameInternal = formData.name;
+      }
 
       if (imageUrl) {
         productData.product_images = [
@@ -477,7 +539,23 @@ export default function ProductsPage() {
       }
 
       if (editingProduct) {
-        await api.updateProduct(editingProduct.id, productData);
+        // Debug: ver qué se está enviando
+        if (process.env.NODE_ENV === 'development') {
+          console.log('📤 Actualizando producto:', {
+            id: editingProduct.id,
+            productData: JSON.parse(JSON.stringify(productData)), // Clonar para ver todos los campos
+            status: productData.status,
+            statusOriginal: editingProduct.status,
+            statusNuevo: formData.status,
+          });
+        }
+        
+        const response = await api.updateProduct(editingProduct.id, productData);
+        
+        // Debug: ver qué responde el backend
+        if (process.env.NODE_ENV === 'development') {
+          console.log('📥 Respuesta del backend al actualizar:', response);
+        }
         showNotification("Producto actualizado correctamente", "success");
         setLoadMode(null);
         setTimeout(() => {
@@ -527,6 +605,79 @@ export default function ProductsPage() {
       showNotification(error.message || "Error al eliminar producto", "error");
     }
   };
+
+  // Stock Management Functions
+  const openStockAdjustment = useCallback((product: Product) => {
+    setStockAdjustmentModal({ product, open: true });
+    setStockAdjustment({ quantity: 0, reason: "" });
+  }, []);
+
+  const closeStockAdjustment = useCallback(() => {
+    setStockAdjustmentModal({ product: null, open: false });
+    setStockAdjustment({ quantity: 0, reason: "" });
+  }, []);
+
+  const handleStockAdjustment = async () => {
+    if (!stockAdjustmentModal.product || stockAdjustment.quantity === 0) {
+      showNotification("La cantidad debe ser diferente de 0", "error");
+      return;
+    }
+
+    setAdjustingStock(true);
+    try {
+      await api.adjustStock(stockAdjustmentModal.product.id, {
+        quantity: stockAdjustment.quantity,
+        reason: stockAdjustment.reason || undefined,
+      });
+      showNotification(
+        `Stock ajustado ${stockAdjustment.quantity > 0 ? "+" : ""}${stockAdjustment.quantity} unidades`,
+        "success"
+      );
+      closeStockAdjustment();
+      loadProducts();
+    } catch (error: any) {
+      showNotification(error.message || "Error al ajustar stock", "error");
+    } finally {
+      setAdjustingStock(false);
+    }
+  };
+
+  const openStockHistory = useCallback(async (product: Product) => {
+    setStockHistoryModal({ product, open: true });
+    setLoadingHistory(true);
+    try {
+      const history: any = await api.getStockHistory(product.id);
+      setStockHistory(Array.isArray(history) ? history : (history?.data || []));
+    } catch (error: any) {
+      showNotification(error.message || "Error al cargar historial", "error");
+      setStockHistory([]);
+    } finally {
+      setLoadingHistory(false);
+    }
+  }, []);
+
+  const closeStockHistory = useCallback(() => {
+    setStockHistoryModal({ product: null, open: false });
+    setStockHistory([]);
+  }, []);
+
+  // Toggle Featured Function
+  const handleToggleFeatured = useCallback(async (product: Product) => {
+    const newFeaturedStatus = !product.isFeatured;
+    setTogglingFeatured(product.id);
+    try {
+      await api.updateProduct(product.id, { is_featured: newFeaturedStatus });
+      showNotification(
+        `Producto ${newFeaturedStatus ? "destacado" : "removido de destacados"}`,
+        "success"
+      );
+      loadProducts();
+    } catch (error: any) {
+      showNotification(error.message || "Error al actualizar destacado", "error");
+    } finally {
+      setTogglingFeatured(null);
+    }
+  }, [loadProducts]);
 
   // CSV Handling
   const handleCSVUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -765,9 +916,6 @@ export default function ProductsPage() {
     }
   };
 
-  // Cuando loadAllProducts está activo, usar allProducts para las estadísticas
-  const productsForStats = loadAllProducts ? allProducts : products;
-  
   const tableData: TableProduct[] = useMemo(() => {
     if (!Array.isArray(products)) return []
 
@@ -800,34 +948,110 @@ export default function ProductsPage() {
         price: priceFormatted,
         stock: product.stock,
         status,
+        isFeatured: product.isFeatured || false,
+        position: product.position,
         raw: product,
       }
     })
   }, [products])
 
-  // Calcular estadísticas desde todos los productos cargados
-  // Si loadAllProducts está activo, usar allProducts; si no, solo los de la página actual
-  const totalProducts = loadAllProducts ? allProducts.length : tableData.length
-  const activeProducts = productsForStats.filter((p) => {
-    if (p.status === "draft") return false;
-    if (p.status === "hidden") return false;
-    return p.stock > 0;
-  }).length
-  const lowStockProducts = productsForStats.filter((p) => p.stock > 0 && p.stock < 10).length
-
   const productColumns = useMemo(
-    () => [
+    () => {
+      const handleOpenAdjustment = (product: Product) => {
+        openStockAdjustment(product);
+      };
+      
+      const handleOpenHistory = (product: Product) => {
+        openStockHistory(product);
+      };
+
+      const handleToggleFeaturedClick = (product: Product) => {
+        handleToggleFeatured(product);
+      };
+
+      return [
+      {
+        key: "featured",
+        label: "Destacado",
+        render: (item: TableProduct) => (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleToggleFeaturedClick(item.raw);
+            }}
+            disabled={togglingFeatured === item.id}
+            className="h-8 w-8 p-0 hover:bg-white/[0.08] text-white/60 hover:text-white disabled:opacity-50"
+            title={item.isFeatured ? "Quitar de destacados" : "Marcar como destacado"}
+          >
+            <Star
+              className={`h-4 w-4 ${
+                item.isFeatured
+                  ? "fill-white/60 text-white/60"
+                  : "text-white/40"
+              }`}
+            />
+          </Button>
+        ),
+      },
       { key: "name", label: "Producto" },
       { key: "category", label: "Categoría" },
       { key: "price", label: "Precio" },
-      { key: "stock", label: "Stock" },
+      {
+        key: "stock",
+        label: "Stock",
+        render: (item: TableProduct) => {
+          const stock = item.stock;
+          const stockColor = stock === 0 
+            ? "text-red-400" 
+            : stock < 10 
+            ? "text-orange-400" 
+            : "text-white/70";
+          
+          return (
+            <div className="flex items-center gap-2">
+              <span className={`font-semibold ${stockColor}`}>{stock}</span>
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenAdjustment(item.raw);
+                  }}
+                  className="h-7 w-7 p-0 hover:bg-white/[0.08] text-white/60 hover:text-white"
+                  title="Ajustar stock"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenHistory(item.raw);
+                  }}
+                  className="h-7 w-7 p-0 hover:bg-white/[0.08] text-white/60 hover:text-white"
+                  title="Ver historial"
+                >
+                  <History className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          );
+        },
+      },
       {
         key: "status",
         label: "Estado",
         render: (item: TableProduct) => {
           const statusConfig = {
-            "Active": { label: "Activo", className: "bg-green-500/10 text-green-200 border-green-500/40" },
-            "Low Stock": { label: "Stock bajo", className: "bg-amber-500/10 text-amber-200 border-amber-500/40" },
+            "Active": { label: "Activo", className: "bg-white/10 text-white/80 border-white/20" },
+            "Low Stock": { label: "Stock bajo", className: "bg-orange-500/20 text-orange-300 border-orange-500/40" },
             "Out of Stock": { label: "Sin stock", className: "bg-red-500/10 text-red-200 border-red-500/40" },
             "Borrador": { label: "Borrador", className: "bg-gray-500/10 text-gray-200 border-gray-500/40" },
             "Oculto": { label: "Oculto", className: "bg-purple-500/10 text-purple-200 border-purple-500/40" },
@@ -844,8 +1068,9 @@ export default function ProductsPage() {
           );
         },
       },
-    ],
-    [],
+    ];
+    },
+    [openStockAdjustment, openStockHistory, handleToggleFeatured, togglingFeatured]
   )
 
   return (
@@ -859,119 +1084,31 @@ export default function ProductsPage() {
           />
         )}
 
-        {/* Header Section */}
-        <div className="space-y-4">
-          <div className="flex items-start justify-between">
-            <div className="space-y-4">
-              <h1 className="font-serif text-[28px] sm:text-[36px] lg:text-[44px] font-semibold tracking-[-0.03em] text-white leading-[1.1]">
-                Catálogo de productos
-              </h1>
-              <div className="ornamental-divider w-24" />
-              <p className="text-[15px] font-light text-white/45 leading-relaxed tracking-[-0.005em] max-w-xl">
-                Gestiona tu inventario con el mismo estilo que ves en la tienda pública.
-              </p>
-            </div>
-            <Button
-              onClick={() => setLoadMode("selector")}
-              className="bg-white/[0.12] hover:bg-white/[0.16] backdrop-blur-md border border-white/[0.15] text-white shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-all duration-300 hover:shadow-[0_12px_40px_rgba(0,0,0,0.5)] rounded-xl px-5 py-2.5 h-auto"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Nuevo producto
-            </Button>
-          </div>
-        </div>
-
-        {/* Stats Overview */}
-        <div className="grid gap-6 sm:grid-cols-3">
-          <div className="overflow-hidden rounded-2xl bg-white/[0.03] backdrop-blur-2xl border border-white/[0.06] shadow-[0_20px_60px_rgba(0,0,0,0.5)] p-6 transition-all duration-300 hover:shadow-[0_24px_72px_rgba(0,0,0,0.6)] hover:border-white/[0.1]">
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-[14px] bg-white/[0.06] backdrop-blur-md icon-container">
-                <PackageIcon className="h-6 w-6 text-white/80" />
-              </div>
-              <div>
-                <p className="text-[13px] font-medium text-white/50 tracking-[-0.005em]">Total productos</p>
-                <p className="font-serif text-[32px] font-semibold text-white tracking-[-0.02em] leading-none mt-1">
-                  {totalProducts}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="overflow-hidden rounded-2xl bg-white/[0.03] backdrop-blur-2xl border border-white/[0.06] shadow-[0_20px_60px_rgba(0,0,0,0.5)] p-6 transition-all duration-300 hover:shadow-[0_24px_72px_rgba(0,0,0,0.6)] hover:border-white/[0.1]">
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-[14px] bg-white/[0.06] backdrop-blur-md icon-container">
-                <PackageIcon className="h-6 w-6 text-white/80" />
-              </div>
-              <div>
-                <p className="text-[13px] font-medium text-white/50 tracking-[-0.005em]">Productos activos</p>
-                <p className="font-serif text-[32px] font-semibold text-white tracking-[-0.02em] leading-none mt-1">
-                  {activeProducts}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="overflow-hidden rounded-2xl bg-white/[0.03] backdrop-blur-2xl border border-white/[0.06] shadow-[0_20px_60px_rgba(0,0,0,0.5)] p-6 transition-all duration-300 hover:shadow-[0_24px_72px_rgba(0,0,0,0.6)] hover:border-white/[0.1]">
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-[14px] bg-white/[0.06] backdrop-blur-md icon-container">
-                <PackageIcon className="h-6 w-6 text-white/80" />
-              </div>
-              <div>
-                <p className="text-[13px] font-medium text-white/50 tracking-[-0.005em]">Stock bajo</p>
-                <p className="font-serif text-[32px] font-semibold text-white tracking-[-0.02em] leading-none mt-1">
-                  {lowStockProducts}
-                </p>
-              </div>
-            </div>
-          </div>
+        {/* Header Section - Botón centrado */}
+        <div className="flex justify-center">
+          <Button
+            onClick={() => setLoadMode("selector")}
+            className="bg-white/[0.12] hover:bg-white/[0.16] backdrop-blur-md border border-white/[0.15] text-white shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-all duration-300 hover:shadow-[0_12px_40px_rgba(0,0,0,0.5)] rounded-xl px-6 py-3 h-auto text-base font-medium"
+          >
+            <Plus className="mr-2 h-5 w-5" />
+            Nuevo producto
+          </Button>
         </div>
 
         {/* Search and Filters */}
-        <div className="flex gap-4 items-center">
-          <form onSubmit={handleSearch} className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
-            <Input
-              type="text"
-              placeholder="Buscar productos por nombre..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-11 pl-11 bg-white/[0.03] backdrop-blur-xl border-white/[0.08] rounded-xl text-white placeholder:text-white/40 focus:border-white/[0.15] focus:bg-white/[0.05] transition-all"
-            />
-          </form>
-          <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/[0.03] backdrop-blur-xl border border-white/[0.08]">
-            <label className="text-sm text-white/70 cursor-pointer flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={loadAllProducts}
-                onChange={(e) => {
-                  setLoadAllProducts(e.target.checked);
-                  setPage(1); // Resetear a página 1 al cambiar de modo
-                }}
-                className="h-4 w-4 rounded border-white/20 bg-white/[0.05] checked:bg-white checked:border-white cursor-pointer"
-              />
-              <span>Cargar todos</span>
-            </label>
-            {loadAllProducts && allProducts.length > 0 && (
-              <span className="text-xs text-white/50">
-                ({allProducts.length} productos)
-              </span>
-            )}
-          </div>
-        </div>
+        <form onSubmit={handleSearch} className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
+          <Input
+            type="text"
+            placeholder="Buscar productos por nombre..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-11 pl-11 bg-white/[0.03] backdrop-blur-xl border-white/[0.08] rounded-xl text-white placeholder:text-white/40 focus:border-white/[0.15] focus:bg-white/[0.05] transition-all"
+          />
+        </form>
 
         {/* Products Table */}
         <div className="space-y-5">
-          <div>
-            <h2 className="font-serif text-[22px] sm:text-[26px] lg:text-[28px] font-semibold text-white tracking-[-0.02em] leading-tight">
-              Todos los productos
-            </h2>
-            <p className="mt-2 text-[14px] font-light text-white/45 tracking-[-0.005em]">
-              {loading
-                ? "Cargando productos..."
-                : `${tableData.length} producto${tableData.length === 1 ? "" : "s"} encontrados`}
-            </p>
-          </div>
-
           {loading ? (
             <div className="p-8 text-center text-white/60">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-white/70"></div>
@@ -1036,6 +1173,38 @@ export default function ProductsPage() {
                 </div>
               )}
             </>
+          )}
+        </div>
+
+        {/* Toggle Cargar Todos - Al final de la página */}
+        <div className="flex justify-center items-center gap-3 pt-6">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setLoadAllProducts(!loadAllProducts);
+              setPage(1); // Resetear a página 1 al cambiar de modo
+            }}
+            className="border-white/20 text-white/80 hover:text-white"
+          >
+            <input
+              type="checkbox"
+              checked={loadAllProducts}
+              onChange={() => {}}
+              onClick={(e) => {
+                e.stopPropagation();
+                setLoadAllProducts(!loadAllProducts);
+                setPage(1);
+              }}
+              className="h-4 w-4 rounded border-white/20 bg-white/[0.05] checked:bg-white checked:border-white cursor-pointer mr-2"
+            />
+            Cargar todos los productos
+          </Button>
+          {loadAllProducts && allProducts.length > 0 && (
+            <span className="text-xs text-white/50">
+              ({allProducts.length} productos cargados)
+            </span>
           )}
         </div>
       </div>
@@ -1114,8 +1283,8 @@ export default function ProductsPage() {
                   className="p-6 rounded-xl bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] hover:border-white/[0.15] transition-all text-left group"
                 >
                   <div className="flex items-center gap-3 mb-4">
-                    <div className="p-3 rounded-lg bg-green-500/10 group-hover:bg-green-500/20 transition-colors">
-                      <FileSpreadsheet className="h-6 w-6 text-green-400" />
+                    <div className="p-3 rounded-lg bg-white/10 group-hover:bg-white/20 transition-colors">
+                      <FileSpreadsheet className="h-6 w-6 text-white/60" />
                     </div>
                     <h3 className="font-semibold text-white text-lg">Importación masiva</h3>
                   </div>
@@ -1847,7 +2016,7 @@ export default function ProductsPage() {
                     <Button
                       onClick={handleCSVImport}
                       disabled={csvLoading}
-                      className="flex-1 h-11 bg-green-500/20 hover:bg-green-500/30 backdrop-blur-md border border-green-500/30 text-green-200 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      className="flex-1 h-11 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 text-white/80 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                     >
                       {csvLoading ? (
                         <>
@@ -1874,6 +2043,215 @@ export default function ProductsPage() {
                       Cancelar
                     </Button>
                   </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Ajuste de Stock */}
+      {stockAdjustmentModal.open && stockAdjustmentModal.product && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div
+            className="absolute inset-0 bg-black/80 backdrop-blur-md"
+            onClick={closeStockAdjustment}
+          />
+          <div className="relative w-full max-w-md rounded-2xl bg-black/60 backdrop-blur-2xl border border-white/[0.12] shadow-[0_32px_80px_rgba(0,0,0,0.9)] animate-in zoom-in-95 duration-300">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/[0.08] bg-black/40 backdrop-blur-xl p-6">
+              <h2 className="font-serif text-[28px] font-semibold tracking-[-0.02em] text-white leading-tight">
+                Ajustar Stock
+              </h2>
+              <Button
+                onClick={closeStockAdjustment}
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-xl hover:bg-white/[0.08] text-white/60 hover:text-white transition-all"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              <div>
+                <p className="text-white/70 text-sm mb-2">Producto:</p>
+                <p className="text-white font-semibold">{stockAdjustmentModal.product.name}</p>
+                <p className="text-white/50 text-sm mt-1">
+                  Stock actual: <span className="font-semibold text-white">{stockAdjustmentModal.product.stock}</span>
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-[13px] font-medium text-white/70 tracking-[-0.005em]">
+                    Cantidad a ajustar
+                  </Label>
+                  <div className="flex items-center gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setStockAdjustment(prev => ({ ...prev, quantity: prev.quantity - 1 }))}
+                      className="h-10 w-10 border-white/20 text-white/80 hover:text-white"
+                    >
+                      <Minus className="h-4 w-4" />
+                    </Button>
+                    <Input
+                      type="number"
+                      value={stockAdjustment.quantity}
+                      onChange={(e) => setStockAdjustment(prev => ({ ...prev, quantity: parseInt(e.target.value) || 0 }))}
+                      className="flex-1 h-10 bg-white/[0.04] backdrop-blur-xl border-white/[0.1] rounded-xl text-white text-center font-semibold"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setStockAdjustment(prev => ({ ...prev, quantity: prev.quantity + 1 }))}
+                      className="h-10 w-10 border-white/20 text-white/80 hover:text-white"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-white/50">
+                    Stock resultante: <span className="font-semibold text-white">
+                      {stockAdjustmentModal.product.stock + stockAdjustment.quantity}
+                    </span>
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-[13px] font-medium text-white/70 tracking-[-0.005em]">
+                    Motivo (opcional)
+                  </Label>
+                  <Textarea
+                    value={stockAdjustment.reason}
+                    onChange={(e) => setStockAdjustment(prev => ({ ...prev, reason: e.target.value }))}
+                    className="min-h-[80px] bg-white/[0.04] backdrop-blur-xl border-white/[0.1] rounded-xl text-white placeholder:text-white/40 focus:border-white/[0.2] focus:bg-white/[0.06] transition-all resize-none"
+                    placeholder="Ej: Reposición de inventario, Venta, Devolución..."
+                    rows={3}
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-white/[0.08]">
+                <Button
+                  type="button"
+                  onClick={handleStockAdjustment}
+                  disabled={adjustingStock || stockAdjustment.quantity === 0}
+                  className="flex-1 h-11 bg-white/[0.12] hover:bg-white/[0.16] backdrop-blur-md border border-white/[0.15] text-white shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-all duration-300 hover:shadow-[0_12px_40px_rgba(0,0,0,0.5)] rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {adjustingStock ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Ajustando...
+                    </>
+                  ) : (
+                    "Confirmar ajuste"
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={closeStockAdjustment}
+                  disabled={adjustingStock}
+                  variant="outline"
+                  className="flex-1 h-11 bg-white/[0.03] hover:bg-white/[0.06] backdrop-blur-md border-white/[0.1] text-white/80 hover:text-white rounded-xl font-medium transition-all disabled:opacity-50"
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Historial de Stock */}
+      {stockHistoryModal.open && stockHistoryModal.product && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div
+            className="absolute inset-0 bg-black/80 backdrop-blur-md"
+            onClick={closeStockHistory}
+          />
+          <div className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-black/60 backdrop-blur-2xl border border-white/[0.12] shadow-[0_32px_80px_rgba(0,0,0,0.9)] animate-in zoom-in-95 duration-300">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/[0.08] bg-black/40 backdrop-blur-xl p-6">
+              <div>
+                <h2 className="font-serif text-[28px] font-semibold tracking-[-0.02em] text-white leading-tight">
+                  Historial de Stock
+                </h2>
+                <p className="text-white/50 text-sm mt-1">{stockHistoryModal.product.name}</p>
+              </div>
+              <Button
+                onClick={closeStockHistory}
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-xl hover:bg-white/[0.08] text-white/60 hover:text-white transition-all"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <div className="p-6">
+              {loadingHistory ? (
+                <div className="p-8 text-center text-white/60">
+                  <Loader2 className="inline-block animate-spin h-8 w-8 mb-2" />
+                  <p className="text-sm">Cargando historial...</p>
+                </div>
+              ) : stockHistory.length === 0 ? (
+                <div className="p-8 text-center text-white/60 bg-white/[0.03] border border-white/[0.06] rounded-2xl backdrop-blur-xl">
+                  No hay movimientos de stock registrados.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {stockHistory.map((movement: any, index: number) => (
+                    <div
+                      key={index}
+                      className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.06] backdrop-blur-xl"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <span
+                              className={`font-semibold ${
+                                movement.quantity > 0
+                                  ? "text-white/70"
+                                  : movement.quantity < 0
+                                  ? "text-red-400"
+                                  : "text-white/60"
+                              }`}
+                            >
+                              {movement.quantity > 0 ? "+" : ""}
+                              {movement.quantity}
+                            </span>
+                            <span className="text-white/70 text-sm">
+                              Stock resultante: <span className="font-semibold text-white">{movement.stockAfter || movement.stock_after || "-"}</span>
+                            </span>
+                          </div>
+                          {movement.reason && (
+                            <p className="text-white/60 text-sm mb-2">{movement.reason}</p>
+                          )}
+                          <div className="flex items-center gap-4 text-xs text-white/50">
+                            <span>
+                              {movement.createdAt
+                                ? new Date(movement.createdAt).toLocaleString("es-MX", {
+                                    dateStyle: "short",
+                                    timeStyle: "short",
+                                  })
+                                : movement.created_at
+                                ? new Date(movement.created_at).toLocaleString("es-MX", {
+                                    dateStyle: "short",
+                                    timeStyle: "short",
+                                  })
+                                : "-"}
+                            </span>
+                            {movement.user && (
+                              <span>
+                                Usuario: <span className="text-white/70">{movement.user.name || movement.user.email || movement.user}</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
