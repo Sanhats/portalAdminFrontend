@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Search, Plus, Filter, X, Upload, AlertTriangle, Trash2 } from "lucide-react";
+import { Search, Plus, X, Upload, AlertTriangle, Trash2, Zap, FileText, FileSpreadsheet, CheckCircle2, Loader2 } from "lucide-react";
 
 import { api } from "@/lib/api-client";
 import Notification from "@/components/Notification";
@@ -13,6 +13,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
+type LoadMode = "selector" | "quick" | "full" | "csv" | null;
+type ProductStatus = "draft" | "active" | "hidden";
+
 interface Product {
   id: string;
   name: string;
@@ -22,6 +25,7 @@ interface Product {
   image?: string;
   description?: string;
   isFeatured?: boolean;
+  status?: ProductStatus;
   variants?: Variant[];
 }
 
@@ -43,7 +47,7 @@ interface Category {
   name: string;
 }
 
-type TableStatus = "Active" | "Low Stock" | "Out of Stock";
+type TableStatus = "Active" | "Low Stock" | "Out of Stock" | "Borrador" | "Oculto";
 
 interface TableProduct {
   id: string;
@@ -56,15 +60,35 @@ interface TableProduct {
   raw: Product;
 }
 
+interface CSVRow {
+  name: string;
+  price: string;
+  stock: string;
+  category: string;
+  description?: string;
+  [key: string]: string | undefined;
+}
+
+interface FieldError {
+  field: string;
+  message: string;
+}
+
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [allProducts, setAllProducts] = useState<Product[]>([]); // Todos los productos cuando loadAllProducts está activo
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [showModal, setShowModal] = useState(false);
+  const [loadAllProducts, setLoadAllProducts] = useState(false); // Modo: cargar todos los productos
+  
+  // Modo de carga
+  const [loadMode, setLoadMode] = useState<LoadMode>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  
+  // Formulario
   const [formData, setFormData] = useState({
     name: "",
     price: "",
@@ -74,14 +98,23 @@ export default function ProductsPage() {
     image: null as File | null,
     imageUrl: "",
     isFeatured: false,
+    status: "active" as ProductStatus,
     variants: [] as Variant[],
+    slug: "",
   });
-  const [notification, setNotification] = useState<NotificationState | null>(
-    null
-  );
+  
+  // Validaciones
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [notification, setNotification] = useState<NotificationState | null>(null);
   const [saving, setSaving] = useState(false);
+  const [continueAdding, setContinueAdding] = useState(false);
+  
+  // CSV
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvPreview, setCsvPreview] = useState<CSVRow[]>([]);
+  const [csvLoading, setCsvLoading] = useState(false);
 
-  const limit = 10;
+  const limit = 50; // Límite por página (paginación server-side)
 
   const loadCategories = useCallback(async () => {
     try {
@@ -95,40 +128,54 @@ export default function ProductsPage() {
   const loadProducts = useCallback(async () => {
     setLoading(true);
     try {
-      const params: any = {
-        page,
-        limit,
-      };
+      const params: any = {};
+      
+      // Si loadAllProducts está activado, usar limit="all" y resetear a página 1
+      if (loadAllProducts) {
+        params.limit = "all";
+        params.page = 1;
+      } else {
+        params.page = page;
+        params.limit = limit;
+      }
+      
       if (search) {
         params.search = search;
       }
       const data: any = await api.getProducts(params);
       
-      // Asegurar que products sea siempre un array
+      // El backend devuelve: { data: [...], total: number, page: number, limit: number, totalPages: number }
       let productsArray: any[] = [];
       if (Array.isArray(data)) {
+        // Si la respuesta es directamente un array (compatibilidad hacia atrás)
         productsArray = data;
-      } else if (data && Array.isArray(data.products)) {
-        productsArray = data.products;
       } else if (data && Array.isArray(data.data)) {
+        // Formato estándar del backend: { data: [...], total, page, limit, totalPages }
         productsArray = data.data;
+      } else if (data && Array.isArray(data.products)) {
+        // Formato alternativo: { products: [...] }
+        productsArray = data.products;
       }
       
-      
-      // Normalizar los productos para asegurar estructura consistente
       const normalizedProducts: Product[] = productsArray.map((product: any) => {
-        // Obtener imagen del array product_images
-        // La estructura real es: { id, image_url }
+        // Debug: ver qué campos tiene el producto
+        if (!product.name && (product.nameInternal || product.name_internal)) {
+          console.log("⚠️ Producto sin campo 'name', usando nameInternal:", {
+            id: product.id,
+            name: product.name,
+            nameInternal: product.nameInternal || product.name_internal,
+            fullProduct: product
+          });
+        }
+        
         let imageUrl: string | undefined = undefined;
         if (product.product_images && Array.isArray(product.product_images) && product.product_images.length > 0) {
-          // El primer elemento del array es un objeto con image_url
           const firstImage = product.product_images[0];
           imageUrl = typeof firstImage === 'string' 
             ? firstImage 
             : firstImage.image_url || firstImage.url || firstImage.imageUrl;
         }
         
-        // Obtener categoría (el backend usa 'categories' en lugar de 'category')
         let category: { id: string; name: string } | undefined = undefined;
         if (product.categories) {
           category = {
@@ -136,7 +183,6 @@ export default function ProductsPage() {
             name: product.categories.name || "",
           };
         } else if (product.category_id) {
-          // Si solo tenemos el ID, buscar el nombre en las categorías cargadas
           const categoryName = categories.find(c => c.id === product.category_id)?.name;
           if (categoryName) {
             category = {
@@ -146,30 +192,66 @@ export default function ProductsPage() {
           }
         }
         
+        // Usar nameInternal como fallback si name no está disponible
+        const productName = product.name || product.nameInternal || product.name_internal || "Sin nombre";
+        
         return {
           id: product.id,
-          name: product.name,
+          name: productName,
           price: product.price,
           stock: product.stock,
           description: product.description,
           isFeatured: product.is_featured || product.isFeatured || false,
+          status: product.status || "active",
           variants: product.variants || [],
           image: imageUrl,
           category: category,
         };
       });
       
-      const finalProducts: Product[] = normalizedProducts;
-      
-      setProducts(finalProducts);
-      
-      // Calcular totalPages
-      if (data && typeof data.totalPages === 'number') {
-        setTotalPages(data.totalPages);
-      } else if (data && typeof data.total === 'number') {
-        setTotalPages(Math.ceil(data.total / limit));
+      if (loadAllProducts) {
+        // Si cargamos todos los productos, guardarlos todos y paginar en el frontend
+        setAllProducts(normalizedProducts);
+        // Calcular totalPages para paginación frontend (50 productos por página)
+        setTotalPages(Math.ceil(normalizedProducts.length / limit));
+        // Obtener solo los productos de la página actual
+        const startIndex = (page - 1) * limit;
+        const endIndex = startIndex + limit;
+        setProducts(normalizedProducts.slice(startIndex, endIndex));
       } else {
-        setTotalPages(1);
+        // Paginación server-side: usar solo los productos recibidos
+        setProducts(normalizedProducts);
+        setAllProducts([]);
+        
+        // Calcular totalPages desde la respuesta del backend
+        // El backend devuelve: { data: [...], total: number, page: number, limit: number, totalPages: number }
+        if (data && typeof data.totalPages === 'number') {
+          // Si el backend ya calculó totalPages, usarlo directamente
+          setTotalPages(data.totalPages);
+        } else if (data && typeof data.total === 'number') {
+          // Si solo tenemos total, calcular totalPages
+          const currentLimit = (data.limit && typeof data.limit === 'number') ? data.limit : limit;
+          setTotalPages(Math.ceil(data.total / currentLimit));
+        } else {
+          // Si no hay información de paginación, asumir 1 página
+          // Pero si tenemos productos, podría haber más páginas
+          setTotalPages(productsArray.length >= limit ? 2 : 1);
+        }
+      }
+      
+      // Debug: log para verificar la respuesta del backend
+      if (process.env.NODE_ENV === 'development') {
+        console.log('📦 Respuesta del backend:', {
+          modo: loadAllProducts ? 'Todos los productos (frontend pagination)' : 'Paginación server-side',
+          productosRecibidos: productsArray.length,
+          total: data?.total,
+          page: data?.page || page,
+          limit: data?.limit || limit,
+          totalPages: data?.totalPages || 'calculado',
+          totalPagesCalculado: loadAllProducts 
+            ? Math.ceil(productsArray.length / limit)
+            : (data?.totalPages || (data?.total ? Math.ceil(data.total / (data?.limit || limit)) : 1))
+        });
       }
     } catch (error) {
       console.error("Error al cargar productos:", error);
@@ -178,7 +260,7 @@ export default function ProductsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, limit, categories]);
+  }, [page, search, limit, categories, loadAllProducts]);
 
   useEffect(() => {
     loadCategories();
@@ -188,14 +270,23 @@ export default function ProductsPage() {
     loadProducts();
   }, [loadProducts]);
 
+  // Efecto para actualizar productos paginados cuando cambia la página en modo "todos"
+  useEffect(() => {
+    if (loadAllProducts && allProducts.length > 0) {
+      const startIndex = (page - 1) * limit;
+      const endIndex = startIndex + limit;
+      setProducts(allProducts.slice(startIndex, endIndex));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, loadAllProducts, limit]);
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setPage(1);
     loadProducts();
   };
 
-  const openCreateModal = () => {
-    setEditingProduct(null);
+  const resetForm = () => {
     setFormData({
       name: "",
       price: "",
@@ -205,9 +296,18 @@ export default function ProductsPage() {
       image: null,
       imageUrl: "",
       isFeatured: false,
+      status: "active",
       variants: [],
+      slug: "",
     });
-    setShowModal(true);
+    setFieldErrors({});
+    setContinueAdding(false);
+  };
+
+  const openCreateModal = (mode: "quick" | "full" = "full") => {
+    setEditingProduct(null);
+    resetForm();
+    setLoadMode(mode);
   };
 
   const openEditModal = (product: Product) => {
@@ -221,9 +321,54 @@ export default function ProductsPage() {
       image: null,
       imageUrl: product.image || "",
       isFeatured: product.isFeatured || false,
+      status: product.status || "active",
       variants: product.variants || [],
+      slug: "",
     });
-    setShowModal(true);
+    setLoadMode("full");
+  };
+
+  const validateField = (field: string, value: any): string | null => {
+    switch (field) {
+      case "name":
+        if (!value || value.trim() === "") return "El nombre es requerido";
+        if (value.length < 3) return "El nombre debe tener al menos 3 caracteres";
+        return null;
+      case "price":
+        if (!value || value === "") return "El precio es requerido";
+        const priceNum = parseFloat(value);
+        if (isNaN(priceNum) || priceNum < 0) return "El precio debe ser un número válido mayor o igual a 0";
+        return null;
+      case "stock":
+        if (!value || value === "") return "El stock es requerido";
+        const stockNum = parseInt(value);
+        if (isNaN(stockNum) || stockNum < 0) return "El stock debe ser un número entero mayor o igual a 0";
+        return null;
+      case "categoryId":
+        if (!value || value.trim() === "") return "Debes seleccionar una categoría";
+        return null;
+      default:
+        return null;
+    }
+  };
+
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {};
+    
+    const nameError = validateField("name", formData.name);
+    if (nameError) errors.name = nameError;
+    
+    const priceError = validateField("price", formData.price);
+    if (priceError) errors.price = priceError;
+    
+    const stockError = validateField("stock", formData.stock);
+    if (stockError) errors.stock = stockError;
+    
+    const categoryError = validateField("categoryId", formData.categoryId);
+    if (categoryError) errors.categoryId = categoryError;
+    
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   const addVariant = () => {
@@ -255,42 +400,37 @@ export default function ProductsPage() {
     }
   };
 
-  // Función para generar slug a partir del nombre
   const generateSlug = (name: string): string => {
     return name
       .toLowerCase()
       .trim()
-      .replace(/[^\w\s-]/g, "") // Remover caracteres especiales
-      .replace(/[\s_-]+/g, "-") // Reemplazar espacios y guiones con un solo guion
-      .replace(/^-+|-+$/g, ""); // Remover guiones al inicio y final
+      .replace(/[^\w\s-]/g, "")
+      .replace(/[\s_-]+/g, "-")
+      .replace(/^-+|-+$/g, "");
   };
 
   const showNotification = (message: string, type: "success" | "error" | "info") => {
     setNotification({ message, type });
-    setTimeout(() => setNotification(null), 3000);
+    setTimeout(() => setNotification(null), 4000);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!validateForm()) {
+      showNotification("Por favor corrige los errores en el formulario", "error");
+      return;
+    }
+    
     setSaving(true);
     setNotification(null);
+    setFieldErrors({});
 
     try {
-      // Validar que la categoría esté seleccionada
-      if (!formData.categoryId || formData.categoryId.trim() === "") {
-        showNotification("Debes seleccionar una categoría para el producto", "error");
-        setSaving(false);
-        return;
-      }
-
       let imageUrl = formData.imageUrl;
 
-      // Subir imagen si hay una nueva
       if (formData.image) {
         const uploadResult = await api.uploadImage(formData.image);
-        
-        // El backend devuelve {success: true, file: {...}}
-        // La URL está en file.url
         const file = uploadResult.file || {};
         imageUrl = file.url || file.path || file.location || file.imageUrl || file.image_url || 
                    uploadResult.url || uploadResult.imageUrl || uploadResult.image_url || 
@@ -301,78 +441,66 @@ export default function ProductsPage() {
         }
       }
 
-      // Generar slug a partir del nombre
-      const slug = generateSlug(formData.name);
-
+      const slug = formData.slug || generateSlug(formData.name);
       const normalizedCategoryId = formData.categoryId.trim();
+
+      // Generar SKU y nameInternal si no están presentes
+      const sku = generateSlug(formData.name).toUpperCase().substring(0, 20);
+      const nameInternal = formData.name;
 
       const productData: any = {
         name: formData.name,
+        nameInternal: nameInternal,
+        sku: sku,
         slug: slug,
         price: parseFloat(formData.price),
         stock: parseInt(formData.stock),
-        description: formData.description,
-        is_featured: formData.isFeatured, // El backend usa snake_case
-        // Enviar ambos formatos para máxima compatibilidad
-        categoryId: normalizedCategoryId,   // lo que espera el backend en el schema
-        category_id: normalizedCategoryId,  // lo que se guarda en la tabla (snake_case)
+        description: formData.description || "",
+        is_featured: formData.isFeatured,
+        status: formData.status,
+        categoryId: normalizedCategoryId,
+        category_id: normalizedCategoryId,
       };
 
-      console.log("🔍 categoryId del formulario:", formData.categoryId);
-      console.log("🔍 categoryId que se enviará:", productData.categoryId);
-      console.log("🔍 category_id que se enviará:", productData.category_id);
-
-      // El backend procesa product_images automáticamente
-      // Acepta: product_images o images, con imageUrl (camelCase)
       if (imageUrl) {
         productData.product_images = [
           {
-            imageUrl: imageUrl, // El backend espera imageUrl (camelCase)
+            imageUrl: imageUrl,
           },
         ];
       }
 
-      // Agregar variantes si existen
       if (formData.variants && formData.variants.length > 0) {
         productData.variants = formData.variants.filter(
           (v) => v.name && v.value
         );
       }
 
-      console.log("Datos completos del producto a enviar:", JSON.stringify(productData, null, 2));
-
-      let productId: string;
       if (editingProduct) {
-        console.log("Actualizando producto:", editingProduct.id);
-        // El backend procesa product_images automáticamente en el update también
-        const result = await api.updateProduct(editingProduct.id, productData);
-        console.log("Resultado de actualización:", result);
-        productId = editingProduct.id;
+        await api.updateProduct(editingProduct.id, productData);
         showNotification("Producto actualizado correctamente", "success");
+        setLoadMode(null);
+        setTimeout(() => {
+          loadProducts();
+        }, 500);
       } else {
-        console.log("Creando nuevo producto con product_images...");
-        // El backend ahora procesa product_images automáticamente cuando se envía en el body
-        const result = await api.createProduct(productData);
-        console.log("Resultado de creación completo:", JSON.stringify(result, null, 2));
-        // Obtener el ID del producto creado
-        const resultData: any = result;
-        productId = resultData.id || resultData.data?.id || resultData.product?.id || resultData.data?.product?.id;
-        console.log("ID del producto creado:", productId);
+        await api.createProduct(productData);
+        showNotification("Producto creado correctamente", "success");
         
-        if (!productId) {
-          throw new Error("No se pudo obtener el ID del producto creado");
+        if (continueAdding) {
+          // Limpiar formulario pero mantener el modo
+          resetForm();
+          // Mantener categoría si es carga rápida
+          if (loadMode === "quick") {
+            setFormData(prev => ({ ...prev, categoryId: normalizedCategoryId }));
+          }
+        } else {
+          setLoadMode(null);
+          setTimeout(() => {
+            loadProducts();
+          }, 500);
         }
-        
-        showNotification("Producto creado correctamente", "success");
-        
-        showNotification("Producto creado correctamente", "success");
       }
-
-      setShowModal(false);
-      // Esperar un momento antes de recargar para que el backend procese
-      setTimeout(() => {
-        loadProducts();
-      }, 500);
     } catch (error: any) {
       console.error("Error completo:", error);
       showNotification(error.message || "Error al guardar producto", "error");
@@ -400,6 +528,246 @@ export default function ProductsPage() {
     }
   };
 
+  // CSV Handling
+  const handleCSVUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.csv')) {
+      showNotification("Por favor selecciona un archivo CSV", "error");
+      return;
+    }
+
+    setCsvFile(file);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      parseCSV(text);
+    };
+    // Leer el archivo con codificación UTF-8 para evitar problemas con caracteres especiales
+    reader.readAsText(file, 'UTF-8');
+  };
+
+  const parseCSV = (text: string) => {
+    const lines = text.split('\n').filter(line => line.trim());
+    if (lines.length < 2) {
+      showNotification("El archivo CSV debe tener al menos una fila de encabezados y una fila de datos", "error");
+      return;
+    }
+
+    // Parsear headers
+    const headerLine = lines[0];
+    const headers = headerLine.split(',').map(h => h.trim().toLowerCase());
+    const requiredHeaders = ['name', 'price', 'stock', 'category'];
+    const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
+    
+    if (missingHeaders.length > 0) {
+      showNotification(`Faltan columnas requeridas: ${missingHeaders.join(', ')}. Columnas encontradas: ${headers.join(', ')}`, "error");
+      return;
+    }
+
+    // Parsear filas
+    const rows: CSVRow[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue; // Saltar líneas vacías
+      
+      // Parsear valores - manejar comas dentro de valores entre comillas
+      const values: string[] = [];
+      let currentValue = '';
+      let insideQuotes = false;
+      
+      for (let j = 0; j < line.length; j++) {
+        const char = line[j];
+        if (char === '"') {
+          insideQuotes = !insideQuotes;
+        } else if (char === ',' && !insideQuotes) {
+          values.push(currentValue.trim());
+          currentValue = '';
+        } else {
+          currentValue += char;
+        }
+      }
+      values.push(currentValue.trim()); // Agregar el último valor
+      
+      // Crear objeto row
+      const row: CSVRow = {
+        name: '',
+        price: '',
+        stock: '',
+        category: '',
+      };
+      headers.forEach((header, index) => {
+        // Remover comillas de los valores si existen
+        let value = (values[index] || '').trim();
+        if (value.startsWith('"') && value.endsWith('"')) {
+          value = value.slice(1, -1);
+        }
+        row[header] = value;
+      });
+      
+      // Solo agregar filas que tengan al menos un nombre
+      if (row.name && row.name.trim()) {
+        rows.push(row);
+      }
+    }
+
+    if (rows.length === 0) {
+      showNotification("No se encontraron filas válidas en el CSV", "error");
+      return;
+    }
+
+    setCsvPreview(rows);
+    showNotification(`CSV cargado: ${rows.length} producto${rows.length === 1 ? "" : "s"} encontrado${rows.length === 1 ? "" : "s"}`, "info");
+  };
+
+  const handleCSVImport = async () => {
+    if (csvPreview.length === 0) {
+      showNotification("No hay datos para importar", "error");
+      return;
+    }
+
+    setCsvLoading(true);
+    setNotification(null);
+
+    try {
+      let successCount = 0;
+      let errorCount = 0;
+      const errors: string[] = [];
+
+      for (let i = 0; i < csvPreview.length; i++) {
+        const row = csvPreview[i];
+        const rowNumber = i + 2; // +2 porque la fila 1 es el header y empezamos desde 0
+        
+        try {
+          // Validar nombre
+          if (!row.name || row.name.trim() === "") {
+            errors.push(`Fila ${rowNumber}: El nombre es requerido`);
+            errorCount++;
+            continue;
+          }
+
+          // Validar precio
+          if (!row.price || row.price.trim() === "") {
+            errors.push(`Fila ${rowNumber} (${row.name}): El precio es requerido`);
+            errorCount++;
+            continue;
+          }
+          const price = parseFloat(row.price);
+          if (isNaN(price) || price < 0) {
+            errors.push(`Fila ${rowNumber} (${row.name}): El precio debe ser un número válido mayor o igual a 0`);
+            errorCount++;
+            continue;
+          }
+
+          // Validar stock
+          if (!row.stock || row.stock.trim() === "") {
+            errors.push(`Fila ${rowNumber} (${row.name}): El stock es requerido`);
+            errorCount++;
+            continue;
+          }
+          const stock = parseInt(row.stock);
+          if (isNaN(stock) || stock < 0) {
+            errors.push(`Fila ${rowNumber} (${row.name}): El stock debe ser un número entero mayor o igual a 0`);
+            errorCount++;
+            continue;
+          }
+
+          // Validar categoría
+          if (!row.category || row.category.trim() === "") {
+            errors.push(`Fila ${rowNumber} (${row.name}): La categoría es requerida`);
+            errorCount++;
+            continue;
+          }
+
+          // Función para normalizar texto (remover acentos y convertir a minúsculas)
+          const normalizeText = (text: string): string => {
+            return text
+              .toLowerCase()
+              .trim()
+              .normalize('NFD')
+              .replace(/[\u0300-\u036f]/g, ''); // Remover diacríticos (acentos)
+          };
+
+          // Buscar categoría por nombre (case insensitive y sin acentos)
+          const category = categories.find(c => 
+            normalizeText(c.name) === normalizeText(row.category)
+          );
+
+          if (!category) {
+            errors.push(`Fila ${rowNumber} (${row.name}): Categoría "${row.category}" no encontrada. Categorías disponibles: ${categories.map(c => c.name).join(", ")}`);
+            errorCount++;
+            continue;
+          }
+
+          // Generar SKU automáticamente desde el nombre (puede venir del CSV o generarse)
+          const sku = row.sku?.trim() || generateSlug(row.name.trim()).toUpperCase().substring(0, 20);
+          const nameInternal = row.nameInternal?.trim() || row.name.trim();
+
+          const productData: any = {
+            name: row.name.trim(),
+            nameInternal: nameInternal,
+            sku: sku,
+            slug: generateSlug(row.name.trim()),
+            price: price,
+            stock: stock,
+            description: (row.description || "").trim(),
+            status: "active",
+            categoryId: category.id,
+            category_id: category.id,
+          };
+
+          await api.createProduct(productData);
+          successCount++;
+        } catch (error: any) {
+          const errorMessage = error.message || "Error desconocido";
+          errors.push(`Fila ${rowNumber} (${row.name || "sin nombre"}): ${errorMessage}`);
+          errorCount++;
+        }
+      }
+
+      // Mostrar resultado
+      if (successCount > 0 && errorCount === 0) {
+        showNotification(
+          `✅ Importación exitosa: ${successCount} producto${successCount === 1 ? "" : "s"} creado${successCount === 1 ? "" : "s"}`,
+          "success"
+        );
+      } else if (successCount > 0 && errorCount > 0) {
+        const errorSummary = errors.slice(0, 3).join("; ");
+        const moreErrors = errors.length > 3 ? ` y ${errors.length - 3} error${errors.length - 3 === 1 ? "" : "es"} más` : "";
+        showNotification(
+          `⚠️ Importación parcial: ${successCount} producto${successCount === 1 ? "" : "s"} creado${successCount === 1 ? "" : "s"}, ${errorCount} error${errorCount === 1 ? "" : "es"}. ${errorSummary}${moreErrors}`,
+          "error"
+        );
+        console.error("Errores de importación:", errors);
+      } else {
+        const errorSummary = errors.slice(0, 3).join("; ");
+        const moreErrors = errors.length > 3 ? ` y ${errors.length - 3} error${errors.length - 3 === 1 ? "" : "es"} más` : "";
+        showNotification(
+          `❌ Importación fallida: ${errorCount} error${errorCount === 1 ? "" : "es"}. ${errorSummary}${moreErrors}`,
+          "error"
+        );
+        console.error("Errores de importación:", errors);
+      }
+
+      if (successCount > 0) {
+        setCsvFile(null);
+        setCsvPreview([]);
+        setLoadMode(null);
+        setTimeout(() => {
+          loadProducts();
+        }, 500);
+      }
+    } catch (error: any) {
+      showNotification(error.message || "Error al importar productos", "error");
+    } finally {
+      setCsvLoading(false);
+    }
+  };
+
+  // Cuando loadAllProducts está activo, usar allProducts para las estadísticas
+  const productsForStats = loadAllProducts ? allProducts : products;
+  
   const tableData: TableProduct[] = useMemo(() => {
     if (!Array.isArray(products)) return []
 
@@ -415,7 +783,11 @@ export default function ProductsPage() {
           }).format(basePrice)
 
       let status: TableStatus = "Active"
-      if (product.stock === 0) {
+      if (product.status === "draft") {
+        status = "Borrador"
+      } else if (product.status === "hidden") {
+        status = "Oculto"
+      } else if (product.stock === 0) {
         status = "Out of Stock"
       } else if (product.stock < 10) {
         status = "Low Stock"
@@ -433,9 +805,15 @@ export default function ProductsPage() {
     })
   }, [products])
 
-  const totalProducts = tableData.length
-  const activeProducts = tableData.filter((p) => p.status === "Active").length
-  const lowStockProducts = tableData.filter((p) => p.status === "Low Stock").length
+  // Calcular estadísticas desde todos los productos cargados
+  // Si loadAllProducts está activo, usar allProducts; si no, solo los de la página actual
+  const totalProducts = loadAllProducts ? allProducts.length : tableData.length
+  const activeProducts = productsForStats.filter((p) => {
+    if (p.status === "draft") return false;
+    if (p.status === "hidden") return false;
+    return p.stock > 0;
+  }).length
+  const lowStockProducts = productsForStats.filter((p) => p.stock > 0 && p.stock < 10).length
 
   const productColumns = useMemo(
     () => [
@@ -446,23 +824,25 @@ export default function ProductsPage() {
       {
         key: "status",
         label: "Estado",
-        render: (item: TableProduct) => (
-          <span
-            className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-tight border ${
-              item.status === "Active"
-                ? "bg-white/[0.1] text-white/80 border-white/[0.15]"
-                : item.status === "Low Stock"
-                  ? "bg-amber-500/10 text-amber-200 border-amber-500/40"
-                  : "bg-red-500/10 text-red-200 border-red-500/40"
-            }`}
-          >
-            {item.status === "Active"
-              ? "Activo"
-              : item.status === "Low Stock"
-                ? "Stock bajo"
-                : "Sin stock"}
-          </span>
-        ),
+        render: (item: TableProduct) => {
+          const statusConfig = {
+            "Active": { label: "Activo", className: "bg-green-500/10 text-green-200 border-green-500/40" },
+            "Low Stock": { label: "Stock bajo", className: "bg-amber-500/10 text-amber-200 border-amber-500/40" },
+            "Out of Stock": { label: "Sin stock", className: "bg-red-500/10 text-red-200 border-red-500/40" },
+            "Borrador": { label: "Borrador", className: "bg-gray-500/10 text-gray-200 border-gray-500/40" },
+            "Oculto": { label: "Oculto", className: "bg-purple-500/10 text-purple-200 border-purple-500/40" },
+          };
+          
+          const config = statusConfig[item.status] || statusConfig["Active"];
+          
+          return (
+            <span
+              className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-tight border ${config.className}`}
+            >
+              {config.label}
+            </span>
+          );
+        },
       },
     ],
     [],
@@ -492,7 +872,7 @@ export default function ProductsPage() {
               </p>
             </div>
             <Button
-              onClick={openCreateModal}
+              onClick={() => setLoadMode("selector")}
               className="bg-white/[0.12] hover:bg-white/[0.16] backdrop-blur-md border border-white/[0.15] text-white shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-all duration-300 hover:shadow-[0_12px_40px_rgba(0,0,0,0.5)] rounded-xl px-5 py-2.5 h-auto"
             >
               <Plus className="mr-2 h-4 w-4" />
@@ -547,8 +927,8 @@ export default function ProductsPage() {
         </div>
 
         {/* Search and Filters */}
-        <form onSubmit={handleSearch} className="flex gap-4">
-          <div className="relative flex-1">
+        <div className="flex gap-4 items-center">
+          <form onSubmit={handleSearch} className="relative flex-1">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
             <Input
               type="text"
@@ -557,9 +937,27 @@ export default function ProductsPage() {
               onChange={(e) => setSearch(e.target.value)}
               className="h-11 pl-11 bg-white/[0.03] backdrop-blur-xl border-white/[0.08] rounded-xl text-white placeholder:text-white/40 focus:border-white/[0.15] focus:bg-white/[0.05] transition-all"
             />
+          </form>
+          <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/[0.03] backdrop-blur-xl border border-white/[0.08]">
+            <label className="text-sm text-white/70 cursor-pointer flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={loadAllProducts}
+                onChange={(e) => {
+                  setLoadAllProducts(e.target.checked);
+                  setPage(1); // Resetear a página 1 al cambiar de modo
+                }}
+                className="h-4 w-4 rounded border-white/20 bg-white/[0.05] checked:bg-white checked:border-white cursor-pointer"
+              />
+              <span>Cargar todos</span>
+            </label>
+            {loadAllProducts && allProducts.length > 0 && (
+              <span className="text-xs text-white/50">
+                ({allProducts.length} productos)
+              </span>
+            )}
           </div>
-          
-        </form>
+        </div>
 
         {/* Products Table */}
         <div className="space-y-5">
@@ -593,11 +991,17 @@ export default function ProductsPage() {
                 onDelete={(item) => handleDelete(item.id, item.name)}
               />
 
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between text-white/70 text-sm pt-2">
+              {/* Mostrar paginación si hay más de una página o si tenemos el límite completo de productos */}
+              {(totalPages > 1 || tableData.length >= limit) && (
+                <div className="flex items-center justify-between text-white/70 text-sm pt-4">
                   <div>
                     Página <span className="font-medium">{page}</span> de{" "}
                     <span className="font-medium">{totalPages}</span>
+                    {tableData.length > 0 && (
+                      <span className="ml-2 text-white/50">
+                        ({tableData.length} producto{tableData.length === 1 ? "" : "s"} en esta página)
+                      </span>
+                    )}
                   </div>
                   <div className="flex gap-2">
                     <Button
@@ -605,8 +1009,12 @@ export default function ProductsPage() {
                       variant="outline"
                       size="sm"
                       disabled={page === 1}
-                      onClick={() => setPage(Math.max(1, page - 1))}
-                      className="border-white/20 text-white/80 hover:text-white"
+                      onClick={() => {
+                        if (page > 1) {
+                          setPage(page - 1);
+                        }
+                      }}
+                      className="border-white/20 text-white/80 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Anterior
                     </Button>
@@ -614,9 +1022,13 @@ export default function ProductsPage() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      disabled={page === totalPages}
-                      onClick={() => setPage(Math.min(totalPages, page + 1))}
-                      className="border-white/20 text-white/80 hover:text-white"
+                      disabled={page >= totalPages}
+                      onClick={() => {
+                        if (page < totalPages) {
+                          setPage(page + 1);
+                        }
+                      }}
+                      className="border-white/20 text-white/80 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Siguiente
                     </Button>
@@ -628,98 +1040,231 @@ export default function ProductsPage() {
         </div>
       </div>
 
-      {/* Modal de crear/editar */}
-      {showModal && (
+      {/* Selector de Modo de Carga */}
+      {loadMode === "selector" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          {/* Backdrop */}
           <div
             className="absolute inset-0 bg-black/80 backdrop-blur-md"
-            onClick={() => !saving && setShowModal(false)}
+            onClick={() => setLoadMode(null)}
           />
+          <div className="relative w-full max-w-3xl rounded-2xl bg-black/60 backdrop-blur-2xl border border-white/[0.12] shadow-[0_32px_80px_rgba(0,0,0,0.9)] animate-in zoom-in-95 duration-300">
+            <div className="p-8">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="font-serif text-[32px] font-semibold tracking-[-0.02em] text-white leading-tight">
+                  Selecciona el modo de carga
+                </h2>
+                <Button
+                  onClick={() => setLoadMode(null)}
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 rounded-xl hover:bg-white/[0.08] text-white/60 hover:text-white transition-all"
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
 
-          {/* Modal */}
-          <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-black/60 backdrop-blur-2xl border border-white/[0.12] shadow-[0_32px_80px_rgba(0,0,0,0.9)] animate-in zoom-in-95 duration-300">
-            {/* Header */}
+              <div className="grid gap-4 md:grid-cols-3">
+                {/* Carga Rápida */}
+                <button
+                  onClick={() => openCreateModal("quick")}
+                  className="p-6 rounded-xl bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] hover:border-white/[0.15] transition-all text-left group"
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-3 rounded-lg bg-blue-500/10 group-hover:bg-blue-500/20 transition-colors">
+                      <Zap className="h-6 w-6 text-blue-400" />
+                    </div>
+                    <h3 className="font-semibold text-white text-lg">Carga rápida</h3>
+                  </div>
+                  <p className="text-white/60 text-sm mb-4">
+                    Campos esenciales: nombre, precio, stock y categoría. Ideal para cargar productos rápidamente.
+                  </p>
+                  <ul className="text-white/50 text-xs space-y-1">
+                    <li>• Nombre</li>
+                    <li>• Precio</li>
+                    <li>• Stock inicial</li>
+                    <li>• Categoría</li>
+                  </ul>
+                </button>
+
+                {/* Carga Completa */}
+                <button
+                  onClick={() => openCreateModal("full")}
+                  className="p-6 rounded-xl bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] hover:border-white/[0.15] transition-all text-left group"
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-3 rounded-lg bg-purple-500/10 group-hover:bg-purple-500/20 transition-colors">
+                      <FileText className="h-6 w-6 text-purple-400" />
+                    </div>
+                    <h3 className="font-semibold text-white text-lg">Carga completa</h3>
+                  </div>
+                  <p className="text-white/60 text-sm mb-4">
+                    Todos los campos disponibles: descripción, imágenes, variantes, SEO y más.
+                  </p>
+                  <ul className="text-white/50 text-xs space-y-1">
+                    <li>• Todos los campos</li>
+                    <li>• Variantes</li>
+                    <li>• Imágenes</li>
+                    <li>• SEO / slug</li>
+                  </ul>
+                </button>
+
+                {/* Importación CSV */}
+                <button
+                  onClick={() => setLoadMode("csv")}
+                  className="p-6 rounded-xl bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] hover:border-white/[0.15] transition-all text-left group"
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-3 rounded-lg bg-green-500/10 group-hover:bg-green-500/20 transition-colors">
+                      <FileSpreadsheet className="h-6 w-6 text-green-400" />
+                    </div>
+                    <h3 className="font-semibold text-white text-lg">Importación masiva</h3>
+                  </div>
+                  <p className="text-white/60 text-sm mb-4">
+                    Sube un archivo CSV con múltiples productos para importarlos de una vez.
+                  </p>
+                  <ul className="text-white/50 text-xs space-y-1">
+                    <li>• Upload archivo CSV</li>
+                    <li>• Preview de datos</li>
+                    <li>• Confirmar importación</li>
+                  </ul>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Carga Rápida */}
+      {loadMode === "quick" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div
+            className="absolute inset-0 bg-black/80 backdrop-blur-md"
+            onClick={() => !saving && setLoadMode(null)}
+          />
+          <div className="relative w-full max-w-lg rounded-2xl bg-black/60 backdrop-blur-2xl border border-white/[0.12] shadow-[0_32px_80px_rgba(0,0,0,0.9)] animate-in zoom-in-95 duration-300">
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/[0.08] bg-black/40 backdrop-blur-xl p-6">
-              <h2 className="font-serif text-[32px] font-semibold tracking-[-0.02em] text-white leading-tight">
-                {editingProduct ? "Editar producto" : "Nuevo producto"}
-              </h2>
+              <div>
+                <h2 className="font-serif text-[28px] font-semibold tracking-[-0.02em] text-white leading-tight">
+                  Carga rápida
+                </h2>
+                <p className="text-white/50 text-sm mt-1">Campos esenciales para crear productos rápidamente</p>
+              </div>
               <Button
-                onClick={() => !saving && setShowModal(false)}
+                onClick={() => !saving && setLoadMode(null)}
                 variant="ghost"
                 size="icon"
                 className="h-9 w-9 rounded-xl hover:bg-white/[0.08] text-white/60 hover:text-white transition-all"
-                type="button"
               >
                 <X className="h-5 w-5" />
               </Button>
             </div>
 
-            {/* Form */}
-            <form onSubmit={handleSubmit} className="p-6 space-y-6">
+            <form onSubmit={handleSubmit} className="p-6 space-y-5">
               {/* Nombre */}
               <div className="space-y-2">
                 <Label htmlFor="name" className="text-[13px] font-medium text-white/70 tracking-[-0.005em]">
-                  Nombre
+                  Nombre <span className="text-red-400">*</span>
                 </Label>
                 <Input
                   id="name"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="h-11 bg-white/[0.04] backdrop-blur-xl border-white/[0.1] rounded-xl text-white placeholder:text-white/40 focus:border-white/[0.2] focus:bg-white/[0.06] transition-all"
+                  onChange={(e) => {
+                    setFormData({ ...formData, name: e.target.value });
+                    if (fieldErrors.name) {
+                      const error = validateField("name", e.target.value);
+                      setFieldErrors(prev => ({ ...prev, name: error || "" }));
+                    }
+                  }}
+                  className={`h-11 bg-white/[0.04] backdrop-blur-xl border rounded-xl text-white placeholder:text-white/40 focus:bg-white/[0.06] transition-all ${
+                    fieldErrors.name ? "border-red-500/50 focus:border-red-500" : "border-white/[0.1] focus:border-white/[0.2]"
+                  }`}
                   placeholder="Ej: iPhone 15 Pro"
-                  required
                 />
+                {fieldErrors.name && (
+                  <p className="text-red-400 text-xs flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    {fieldErrors.name}
+                  </p>
+                )}
               </div>
 
               {/* Precio y Stock */}
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="price" className="text-[13px] font-medium text-white/70 tracking-[-0.005em]">
-                    Precio
+                    Precio <span className="text-red-400">*</span>
                   </Label>
                   <Input
                     id="price"
                     type="number"
                     step="0.01"
                     value={formData.price}
-                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                    className="h-11 bg-white/[0.04] backdrop-blur-xl border-white/[0.1] rounded-xl text-white placeholder:text-white/40 focus:border-white/[0.2] focus:bg-white/[0.06] transition-all"
+                    onChange={(e) => {
+                      setFormData({ ...formData, price: e.target.value });
+                      if (fieldErrors.price) {
+                        const error = validateField("price", e.target.value);
+                        setFieldErrors(prev => ({ ...prev, price: error || "" }));
+                      }
+                    }}
+                    className={`h-11 bg-white/[0.04] backdrop-blur-xl border rounded-xl text-white placeholder:text-white/40 focus:bg-white/[0.06] transition-all ${
+                      fieldErrors.price ? "border-red-500/50 focus:border-red-500" : "border-white/[0.1] focus:border-white/[0.2]"
+                    }`}
                     placeholder="0.00"
-                    required
                   />
+                  {fieldErrors.price && (
+                    <p className="text-red-400 text-xs flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      {fieldErrors.price}
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="stock" className="text-[13px] font-medium text-white/70 tracking-[-0.005em]">
-                    Stock
+                    Stock inicial <span className="text-red-400">*</span>
                   </Label>
                   <Input
                     id="stock"
                     type="number"
                     value={formData.stock}
-                    onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
-                    className="h-11 bg-white/[0.04] backdrop-blur-xl border-white/[0.1] rounded-xl text-white placeholder:text-white/40 focus:border-white/[0.2] focus:bg-white/[0.06] transition-all"
+                    onChange={(e) => {
+                      setFormData({ ...formData, stock: e.target.value });
+                      if (fieldErrors.stock) {
+                        const error = validateField("stock", e.target.value);
+                        setFieldErrors(prev => ({ ...prev, stock: error || "" }));
+                      }
+                    }}
+                    className={`h-11 bg-white/[0.04] backdrop-blur-xl border rounded-xl text-white placeholder:text-white/40 focus:bg-white/[0.06] transition-all ${
+                      fieldErrors.stock ? "border-red-500/50 focus:border-red-500" : "border-white/[0.1] focus:border-white/[0.2]"
+                    }`}
                     placeholder="0"
-                    required
                   />
+                  {fieldErrors.stock && (
+                    <p className="text-red-400 text-xs flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      {fieldErrors.stock}
+                    </p>
+                  )}
                 </div>
               </div>
 
               {/* Categoría */}
               <div className="space-y-2">
                 <Label htmlFor="category" className="text-[13px] font-medium text-white/70 tracking-[-0.005em]">
-                  Categoría <span className="text-white/50">*</span>
+                  Categoría <span className="text-red-400">*</span>
                 </Label>
                 <select
                   id="category"
                   value={formData.categoryId || ""}
                   onChange={(e) => {
-                    const selectedCategoryId = e.target.value;
-                    console.log("🔄 Categoría seleccionada:", selectedCategoryId);
-                    setFormData({ ...formData, categoryId: selectedCategoryId });
+                    setFormData({ ...formData, categoryId: e.target.value });
+                    if (fieldErrors.categoryId) {
+                      const error = validateField("categoryId", e.target.value);
+                      setFieldErrors(prev => ({ ...prev, categoryId: error || "" }));
+                    }
                   }}
-                  required
-                  className="w-full h-11 px-4 bg-white/[0.04] backdrop-blur-xl border rounded-xl text-white transition-all appearance-none cursor-pointer border-white/[0.1] focus:border-white/[0.2] focus:bg-white/[0.06] focus:outline-none"
+                  className={`w-full h-11 px-4 bg-white/[0.04] backdrop-blur-xl border rounded-xl text-white transition-all appearance-none cursor-pointer focus:outline-none focus:bg-white/[0.06] ${
+                    fieldErrors.categoryId ? "border-red-500/50 focus:border-red-500" : "border-white/[0.1] focus:border-white/[0.2]"
+                  }`}
                 >
                   <option value="" className="bg-black text-white/60">
                     Seleccionar categoría
@@ -730,14 +1275,259 @@ export default function ProductsPage() {
                     </option>
                   ))}
                 </select>
-                {!formData.categoryId && (
-                  <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20">
-                    <AlertTriangle className="h-4 w-4 text-red-400" />
-                    <p className="text-[12px] text-red-300 tracking-[-0.005em]">
-                      Debes seleccionar una categoría para que el producto se guarde correctamente
-                    </p>
-                  </div>
+                {fieldErrors.categoryId && (
+                  <p className="text-red-400 text-xs flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    {fieldErrors.categoryId}
+                  </p>
                 )}
+              </div>
+
+              {/* Estado */}
+              <div className="space-y-2">
+                <Label className="text-[13px] font-medium text-white/70 tracking-[-0.005em]">
+                  Estado
+                </Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["draft", "active", "hidden"] as ProductStatus[]).map((status) => (
+                    <button
+                      key={status}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, status })}
+                      className={`p-3 rounded-lg border transition-all text-sm font-medium ${
+                        formData.status === status
+                          ? "bg-white/[0.12] border-white/[0.3] text-white"
+                          : "bg-white/[0.04] border-white/[0.1] text-white/60 hover:bg-white/[0.06]"
+                      }`}
+                    >
+                      {status === "draft" ? "Borrador" : status === "active" ? "Activo" : "Oculto"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex flex-col gap-3 pt-4 border-t border-white/[0.08]">
+                <Button
+                  type="submit"
+                  disabled={saving}
+                  className="w-full h-11 bg-white/[0.12] hover:bg-white/[0.16] backdrop-blur-md border border-white/[0.15] text-white shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-all duration-300 hover:shadow-[0_12px_40px_rgba(0,0,0,0.5)] rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="mr-2 h-4 w-4" />
+                      Crear producto
+                    </>
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setContinueAdding(true);
+                    handleSubmit({ preventDefault: () => {} } as React.FormEvent);
+                  }}
+                  disabled={saving}
+                  className="w-full h-11 bg-blue-500/20 hover:bg-blue-500/30 backdrop-blur-md border border-blue-500/30 text-blue-200 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Crear y seguir cargando
+                    </>
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => !saving && setLoadMode(null)}
+                  disabled={saving}
+                  variant="outline"
+                  className="w-full h-11 bg-white/[0.03] hover:bg-white/[0.06] backdrop-blur-md border-white/[0.1] text-white/80 hover:text-white rounded-xl font-medium transition-all disabled:opacity-50"
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Carga Completa */}
+      {loadMode === "full" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div
+            className="absolute inset-0 bg-black/80 backdrop-blur-md"
+            onClick={() => !saving && setLoadMode(null)}
+          />
+          <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-black/60 backdrop-blur-2xl border border-white/[0.12] shadow-[0_32px_80px_rgba(0,0,0,0.9)] animate-in zoom-in-95 duration-300">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/[0.08] bg-black/40 backdrop-blur-xl p-6">
+              <h2 className="font-serif text-[32px] font-semibold tracking-[-0.02em] text-white leading-tight">
+                {editingProduct ? "Editar producto" : "Nuevo producto"}
+              </h2>
+              <Button
+                onClick={() => !saving && setLoadMode(null)}
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-xl hover:bg-white/[0.08] text-white/60 hover:text-white transition-all"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="p-6 space-y-6">
+              {/* Nombre */}
+              <div className="space-y-2">
+                <Label htmlFor="name-full" className="text-[13px] font-medium text-white/70 tracking-[-0.005em]">
+                  Nombre <span className="text-red-400">*</span>
+                </Label>
+                <Input
+                  id="name-full"
+                  value={formData.name}
+                  onChange={(e) => {
+                    setFormData({ ...formData, name: e.target.value });
+                    if (fieldErrors.name) {
+                      const error = validateField("name", e.target.value);
+                      setFieldErrors(prev => ({ ...prev, name: error || "" }));
+                    }
+                  }}
+                  className={`h-11 bg-white/[0.04] backdrop-blur-xl border rounded-xl text-white placeholder:text-white/40 focus:bg-white/[0.06] transition-all ${
+                    fieldErrors.name ? "border-red-500/50 focus:border-red-500" : "border-white/[0.1] focus:border-white/[0.2]"
+                  }`}
+                  placeholder="Ej: iPhone 15 Pro"
+                />
+                {fieldErrors.name && (
+                  <p className="text-red-400 text-xs flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    {fieldErrors.name}
+                  </p>
+                )}
+              </div>
+
+              {/* Precio y Stock */}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="price-full" className="text-[13px] font-medium text-white/70 tracking-[-0.005em]">
+                    Precio <span className="text-red-400">*</span>
+                  </Label>
+                  <Input
+                    id="price-full"
+                    type="number"
+                    step="0.01"
+                    value={formData.price}
+                    onChange={(e) => {
+                      setFormData({ ...formData, price: e.target.value });
+                      if (fieldErrors.price) {
+                        const error = validateField("price", e.target.value);
+                        setFieldErrors(prev => ({ ...prev, price: error || "" }));
+                      }
+                    }}
+                    className={`h-11 bg-white/[0.04] backdrop-blur-xl border rounded-xl text-white placeholder:text-white/40 focus:bg-white/[0.06] transition-all ${
+                      fieldErrors.price ? "border-red-500/50 focus:border-red-500" : "border-white/[0.1] focus:border-white/[0.2]"
+                    }`}
+                    placeholder="0.00"
+                  />
+                  {fieldErrors.price && (
+                    <p className="text-red-400 text-xs flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      {fieldErrors.price}
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="stock-full" className="text-[13px] font-medium text-white/70 tracking-[-0.005em]">
+                    Stock <span className="text-red-400">*</span>
+                  </Label>
+                  <Input
+                    id="stock-full"
+                    type="number"
+                    value={formData.stock}
+                    onChange={(e) => {
+                      setFormData({ ...formData, stock: e.target.value });
+                      if (fieldErrors.stock) {
+                        const error = validateField("stock", e.target.value);
+                        setFieldErrors(prev => ({ ...prev, stock: error || "" }));
+                      }
+                    }}
+                    className={`h-11 bg-white/[0.04] backdrop-blur-xl border rounded-xl text-white placeholder:text-white/40 focus:bg-white/[0.06] transition-all ${
+                      fieldErrors.stock ? "border-red-500/50 focus:border-red-500" : "border-white/[0.1] focus:border-white/[0.2]"
+                    }`}
+                    placeholder="0"
+                  />
+                  {fieldErrors.stock && (
+                    <p className="text-red-400 text-xs flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      {fieldErrors.stock}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Categoría */}
+              <div className="space-y-2">
+                <Label htmlFor="category-full" className="text-[13px] font-medium text-white/70 tracking-[-0.005em]">
+                  Categoría <span className="text-red-400">*</span>
+                </Label>
+                <select
+                  id="category-full"
+                  value={formData.categoryId || ""}
+                  onChange={(e) => {
+                    setFormData({ ...formData, categoryId: e.target.value });
+                    if (fieldErrors.categoryId) {
+                      const error = validateField("categoryId", e.target.value);
+                      setFieldErrors(prev => ({ ...prev, categoryId: error || "" }));
+                    }
+                  }}
+                  className={`w-full h-11 px-4 bg-white/[0.04] backdrop-blur-xl border rounded-xl text-white transition-all appearance-none cursor-pointer focus:outline-none focus:bg-white/[0.06] ${
+                    fieldErrors.categoryId ? "border-red-500/50 focus:border-red-500" : "border-white/[0.1] focus:border-white/[0.2]"
+                  }`}
+                >
+                  <option value="" className="bg-black text-white/60">
+                    Seleccionar categoría
+                  </option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id} className="bg-black text-white">
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+                {fieldErrors.categoryId && (
+                  <p className="text-red-400 text-xs flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    {fieldErrors.categoryId}
+                  </p>
+                )}
+              </div>
+
+              {/* Estado */}
+              <div className="space-y-2">
+                <Label className="text-[13px] font-medium text-white/70 tracking-[-0.005em]">
+                  Estado
+                </Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["draft", "active", "hidden"] as ProductStatus[]).map((status) => (
+                    <button
+                      key={status}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, status })}
+                      className={`p-3 rounded-lg border transition-all text-sm font-medium ${
+                        formData.status === status
+                          ? "bg-white/[0.12] border-white/[0.3] text-white"
+                          : "bg-white/[0.04] border-white/[0.1] text-white/60 hover:bg-white/[0.06]"
+                      }`}
+                    >
+                      {status === "draft" ? "Borrador" : status === "active" ? "Activo" : "Oculto"}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Descripción */}
@@ -755,6 +1545,21 @@ export default function ProductsPage() {
                 />
               </div>
 
+              {/* Slug */}
+              <div className="space-y-2">
+                <Label htmlFor="slug" className="text-[13px] font-medium text-white/70 tracking-[-0.005em]">
+                  Slug (SEO)
+                </Label>
+                <Input
+                  id="slug"
+                  value={formData.slug || generateSlug(formData.name)}
+                  onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+                  className="h-11 bg-white/[0.04] backdrop-blur-xl border-white/[0.1] rounded-xl text-white placeholder:text-white/40 focus:border-white/[0.2] focus:bg-white/[0.06] transition-all"
+                  placeholder="Se genera automáticamente desde el nombre"
+                />
+                <p className="text-white/40 text-xs">URL amigable para SEO. Se genera automáticamente si se deja vacío.</p>
+              </div>
+
               {/* Imagen */}
               <div className="space-y-2">
                 <Label htmlFor="image" className="text-[13px] font-medium text-white/70 tracking-[-0.005em]">
@@ -768,7 +1573,7 @@ export default function ProductsPage() {
                       value={formData.imageUrl}
                       onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
                       className="h-11 bg-white/[0.04] backdrop-blur-xl border-white/[0.1] rounded-xl text-white placeholder:text-white/40 focus:border-white/[0.2] focus:bg-white/[0.06] transition-all"
-                      placeholder="https://ejemplo.com/imagen.jpg (opcional si subes archivo)"
+                      placeholder="https://ejemplo.com/imagen.jpg"
                     />
                     <Button
                       type="button"
@@ -904,15 +1709,20 @@ export default function ProductsPage() {
                   disabled={saving}
                   className="flex-1 h-11 bg-white/[0.12] hover:bg-white/[0.16] backdrop-blur-md border border-white/[0.15] text-white shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-all duration-300 hover:shadow-[0_12px_40px_rgba(0,0,0,0.5)] rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {saving
-                    ? "Guardando..."
-                    : editingProduct
-                      ? "Actualizar"
-                      : "Crear"}
+                  {saving ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Guardando...
+                    </>
+                  ) : editingProduct ? (
+                    "Actualizar"
+                  ) : (
+                    "Crear"
+                  )}
                 </Button>
                 <Button
                   type="button"
-                  onClick={() => !saving && setShowModal(false)}
+                  onClick={() => !saving && setLoadMode(null)}
                   disabled={saving}
                   variant="outline"
                   className="flex-1 h-11 bg-white/[0.03] hover:bg-white/[0.06] backdrop-blur-md border-white/[0.1] text-white/80 hover:text-white rounded-xl font-medium transition-all disabled:opacity-50"
@@ -921,6 +1731,152 @@ export default function ProductsPage() {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Importación CSV */}
+      {loadMode === "csv" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div
+            className="absolute inset-0 bg-black/80 backdrop-blur-md"
+            onClick={() => !csvLoading && setLoadMode(null)}
+          />
+          <div className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl bg-black/60 backdrop-blur-2xl border border-white/[0.12] shadow-[0_32px_80px_rgba(0,0,0,0.9)] animate-in zoom-in-95 duration-300">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/[0.08] bg-black/40 backdrop-blur-xl p-6">
+              <div>
+                <h2 className="font-serif text-[32px] font-semibold tracking-[-0.02em] text-white leading-tight">
+                  Importación masiva (CSV)
+                </h2>
+                <p className="text-white/50 text-sm mt-1">Sube un archivo CSV con múltiples productos</p>
+              </div>
+              <Button
+                onClick={() => !csvLoading && setLoadMode(null)}
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-xl hover:bg-white/[0.08] text-white/60 hover:text-white transition-all"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Upload */}
+              {!csvFile && (
+                <div className="space-y-4">
+                  <div className="border-2 border-dashed border-white/[0.2] rounded-xl p-12 text-center hover:border-white/[0.3] transition-colors">
+                    <FileSpreadsheet className="h-12 w-12 text-white/40 mx-auto mb-4" />
+                    <Label htmlFor="csv-upload" className="cursor-pointer">
+                      <div className="space-y-2">
+                        <p className="text-white font-medium">Haz clic para seleccionar un archivo CSV</p>
+                        <p className="text-white/50 text-sm">o arrastra y suelta el archivo aquí</p>
+                      </div>
+                      <input
+                        id="csv-upload"
+                        type="file"
+                        accept=".csv"
+                        onChange={handleCSVUpload}
+                        className="hidden"
+                      />
+                    </Label>
+                  </div>
+                  <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4">
+                    <p className="text-white/70 text-sm font-medium mb-2">Formato requerido del CSV:</p>
+                    <p className="text-white/50 text-xs font-mono">
+                      name,price,stock,category,description
+                    </p>
+                    <p className="text-white/50 text-xs mt-2">
+                      Ejemplo: iPhone 15 Pro,25000,10,Electrónicos,El último iPhone de Apple
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Preview */}
+              {csvPreview.length > 0 && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-white font-semibold text-lg">Vista previa</h3>
+                      <p className="text-white/50 text-sm">{csvPreview.length} productos listos para importar</p>
+                    </div>
+                    <Button
+                      onClick={() => {
+                        setCsvFile(null);
+                        setCsvPreview([]);
+                      }}
+                      variant="outline"
+                      size="sm"
+                      className="bg-white/[0.03] hover:bg-white/[0.06] border-white/[0.1] text-white/80 hover:text-white"
+                    >
+                      Cambiar archivo
+                    </Button>
+                  </div>
+
+                  <div className="border border-white/[0.1] rounded-xl overflow-hidden">
+                    <div className="overflow-x-auto max-h-[400px]">
+                      <table className="w-full text-sm">
+                        <thead className="bg-white/[0.05] sticky top-0">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-white/70 font-medium">Nombre</th>
+                            <th className="px-4 py-3 text-left text-white/70 font-medium">Precio</th>
+                            <th className="px-4 py-3 text-left text-white/70 font-medium">Stock</th>
+                            <th className="px-4 py-3 text-left text-white/70 font-medium">Categoría</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/[0.05]">
+                          {csvPreview.slice(0, 10).map((row, index) => (
+                            <tr key={index} className="hover:bg-white/[0.02]">
+                              <td className="px-4 py-3 text-white/80">{row.name}</td>
+                              <td className="px-4 py-3 text-white/80">${row.price}</td>
+                              <td className="px-4 py-3 text-white/80">{row.stock}</td>
+                              <td className="px-4 py-3 text-white/80">{row.category}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {csvPreview.length > 10 && (
+                      <div className="px-4 py-3 bg-white/[0.03] text-center text-white/50 text-sm">
+                        ... y {csvPreview.length - 10} productos más
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex gap-3 pt-4 border-t border-white/[0.08]">
+                    <Button
+                      onClick={handleCSVImport}
+                      disabled={csvLoading}
+                      className="flex-1 h-11 bg-green-500/20 hover:bg-green-500/30 backdrop-blur-md border border-green-500/30 text-green-200 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                      {csvLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Importando...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="mr-2 h-4 w-4" />
+                          Confirmar importación
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setCsvFile(null);
+                        setCsvPreview([]);
+                        setLoadMode(null);
+                      }}
+                      disabled={csvLoading}
+                      variant="outline"
+                      className="flex-1 h-11 bg-white/[0.03] hover:bg-white/[0.06] backdrop-blur-md border-white/[0.1] text-white/80 hover:text-white rounded-xl font-medium transition-all disabled:opacity-50"
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -31,15 +31,15 @@ export default function StoreHomeClient() {
     setLoading(true);
     setError(null);
     try {
-      // Cargar productos destacados
-      const featuredData: any = await api.getProducts({ isFeatured: true, limit: 6 });
+      // Cargar productos destacados (aumentado a 12)
+      const featuredData: any = await api.getProducts({ isFeatured: true, limit: 12 });
       const featuredArray = Array.isArray(featuredData)
         ? featuredData
         : featuredData.data || featuredData.products || [];
       setFeaturedProducts(featuredArray);
 
-      // Cargar todos los productos (últimos 8)
-      const allData: any = await api.getProducts({ limit: 8 });
+      // Cargar todos los productos (aumentado a 20)
+      const allData: any = await api.getProducts({ limit: 20 });
       const allArray = Array.isArray(allData)
         ? allData
         : allData.data || allData.products || [];
