@@ -181,6 +181,20 @@ export default function ProductsPage() {
           });
         }
         
+        // Debug específico para el producto que está fallando
+        if (product.id === '0f405c80-70a1-44f2-abcc-cb5f9caace7c') {
+          console.log('🔍 Debug normalización producto:', {
+            productId: product.id,
+            productName: product.name,
+            categories: product.categories,
+            category: product.category,
+            category_id: product.category_id,
+            categoryId: product.categoryId,
+            categoriesArrayLength: categories.length,
+            firstCategory: categories[0]
+          });
+        }
+        
         let imageUrl: string | undefined = undefined;
         if (product.product_images && Array.isArray(product.product_images) && product.product_images.length > 0) {
           const firstImage = product.product_images[0];
@@ -189,18 +203,57 @@ export default function ProductsPage() {
             : firstImage.image_url || firstImage.url || firstImage.imageUrl;
         }
         
+        // Normalizar categoría - intentar múltiples formatos
         let category: { id: string; name: string } | undefined = undefined;
-        if (product.categories) {
+        
+        // Intentar obtener el ID de categoría de múltiples fuentes
+        const categoryId = product.category_id || 
+                          product.categoryId || 
+                          (product.categories?.id) || 
+                          (product.category?.id);
+        
+        // Debug en desarrollo para productos específicos
+        if (process.env.NODE_ENV === 'development' && product.id === '0f405c80-70a1-44f2-abcc-cb5f9caace7c') {
+          console.log('🔍 Debug categoría producto:', {
+            productId: product.id,
+            productName: product.name,
+            categories: product.categories,
+            category: product.category,
+            category_id: product.category_id,
+            categoryId: product.categoryId,
+            extractedCategoryId: categoryId,
+            categoriesArrayLength: categories.length
+          });
+        }
+        
+        if (product.categories && typeof product.categories === 'object' && product.categories.id) {
+          // Si viene como objeto categories (formato completo del backend)
           category = {
-            id: product.categories.id || product.category_id,
+            id: product.categories.id || categoryId || "",
             name: product.categories.name || "",
           };
-        } else if (product.category_id) {
-          const categoryName = categories.find(c => c.id === product.category_id)?.name;
-          if (categoryName) {
+        } else if (product.category && typeof product.category === 'object' && product.category.id) {
+          // Si viene como objeto category (singular)
+          category = {
+            id: product.category.id || categoryId || "",
+            name: product.category.name || "",
+          };
+        } else if (categoryId) {
+          // Si solo viene el ID, buscar el nombre en las categorías cargadas
+          const foundCategory = categories.find(c => c.id === categoryId);
+          if (foundCategory) {
             category = {
-              id: product.category_id,
-              name: categoryName,
+              id: categoryId,
+              name: foundCategory.name,
+            };
+          } else {
+            // Si no se encuentra, mostrar advertencia y usar el ID
+            if (process.env.NODE_ENV === 'development') {
+              console.warn(`⚠️ Categoría con ID ${categoryId} no encontrada en el listado de categorías. Producto: ${product.id || product.name}`);
+            }
+            category = {
+              id: categoryId,
+              name: "Sin categoría",
             };
           }
         }
@@ -558,6 +611,8 @@ export default function ProductsPage() {
         }
         showNotification("Producto actualizado correctamente", "success");
         setLoadMode(null);
+        // Recargar categorías antes de productos para asegurar que estén disponibles
+        await loadCategories();
         setTimeout(() => {
           loadProducts();
         }, 500);
