@@ -1,32 +1,29 @@
 interface LoadingSpinnerProps {
   size?: "sm" | "md" | "lg";
-  text?: string;
   fullScreen?: boolean;
 }
 
 export default function LoadingSpinner({ 
-  size = "md", 
-  text,
-  fullScreen = false 
+  size = "lg", 
+  fullScreen = true 
 }: LoadingSpinnerProps) {
   const sizeClasses = {
-    sm: "h-4 w-4",
-    md: "h-8 w-8",
-    lg: "h-12 w-12",
+    sm: "h-3 w-64",
+    md: "h-4 w-80",
+    lg: "h-5 w-96",
   };
 
   const containerClasses = fullScreen
-    ? "min-h-screen flex items-center justify-center"
-    : "flex flex-col items-center justify-center py-12";
+    ? "fixed inset-0 flex items-center justify-center z-50"
+    : "flex items-center justify-center py-12";
 
   return (
     <div className={containerClasses}>
-      <div
-        className={`${sizeClasses[size]} animate-spin rounded-full border-b-2 border-blue-600`}
-      ></div>
-      {text && (
-        <p className="mt-4 text-gray-600 text-sm">{text}</p>
-      )}
+      <div className="neu-loader-wrapper">
+        <div className={`neu-loader ${sizeClasses[size]}`}>
+          <div className="neu-loader-bar"></div>
+        </div>
+      </div>
     </div>
   );
 }

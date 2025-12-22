@@ -25,20 +25,20 @@ export default function Notification({
 
   const bgColor =
     type === "success"
-      ? "bg-green-50 border-green-200 text-green-800"
+      ? "text-green-700"
       : type === "error"
-      ? "bg-red-50 border-red-200 text-red-800"
-      : "bg-blue-50 border-blue-200 text-blue-800";
+      ? "text-red-700"
+      : "text-blue-700";
 
   return (
     <div
-      className={`fixed top-4 right-4 z-50 p-4 border rounded-lg shadow-lg ${bgColor} min-w-[300px] max-w-md`}
+      className={`fixed top-4 right-4 z-50 p-4 rounded-lg neu-elevated min-w-[300px] max-w-md ${bgColor}`}
     >
       <div className="flex justify-between items-start">
         <p className="font-medium">{message}</p>
         <button
           onClick={onClose}
-          className="ml-4 text-gray-500 hover:text-gray-700"
+          className="ml-4 text-muted-foreground hover:text-foreground neu-flat rounded-md px-2 py-1 neu-active"
         >
           ×
         </button>

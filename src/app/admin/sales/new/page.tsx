@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select } from "@/components/ui/select";
 
 interface Product {
   id: string;
@@ -274,7 +275,7 @@ export default function NewSalePage() {
         {/* Paso 1: Buscar y agregar productos */}
         {step === 1 && (
           <div className="space-y-6">
-            <div className="bg-white/[0.03] backdrop-blur-2xl border border-white/[0.06] rounded-2xl p-6 shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
+            <div className="neu-elevated border-0 rounded-2xl p-6">
               <div className="space-y-4">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-white/40" />
@@ -362,7 +363,7 @@ export default function NewSalePage() {
 
             {/* Items agregados */}
             {saleItems.length > 0 && (
-              <div className="bg-white/[0.03] backdrop-blur-2xl border border-white/[0.06] rounded-2xl p-6 shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
+              <div className="neu-elevated border-0 rounded-2xl p-6">
                 <h3 className="text-lg font-semibold text-white mb-4">Productos agregados</h3>
                 <div className="space-y-2">
                   {saleItems.map((item, index) => (
@@ -434,7 +435,7 @@ export default function NewSalePage() {
         {/* Paso 2: Resumen */}
         {step === 2 && (
           <div className="space-y-6">
-            <div className="bg-white/[0.03] backdrop-blur-2xl border border-white/[0.06] rounded-2xl p-6 shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
+            <div className="neu-elevated border-0 rounded-2xl p-6">
               <h3 className="text-lg font-semibold text-white mb-4">Resumen de la Venta</h3>
               
               <div className="space-y-3 mb-6">
@@ -466,17 +467,16 @@ export default function NewSalePage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-white/80">Método de Pago</Label>
-                  <select
+                  <Label className="text-foreground">Método de Pago</Label>
+                  <Select
                     value={paymentMethod}
                     onChange={(e) => setPaymentMethod(e.target.value as any)}
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white/80 focus:outline-none focus:ring-2 focus:ring-white/20"
                   >
                     <option value="cash">Efectivo</option>
                     <option value="transfer">Transferencia</option>
                     <option value="mercadopago">Mercado Pago</option>
                     <option value="other">Otro</option>
-                  </select>
+                  </Select>
                 </div>
 
                 <div className="space-y-2">
@@ -513,7 +513,7 @@ export default function NewSalePage() {
         {/* Paso 3: Guardar */}
         {step === 3 && (
           <div className="space-y-6">
-            <div className="bg-white/[0.03] backdrop-blur-2xl border border-white/[0.06] rounded-2xl p-6 shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
+            <div className="neu-elevated border-0 rounded-2xl p-6">
               <div className="text-center space-y-4">
                 <ShoppingCart className="h-16 w-16 text-blue-400 mx-auto" />
                 <h3 className="text-xl font-semibold text-white">Confirmar Venta</h3>

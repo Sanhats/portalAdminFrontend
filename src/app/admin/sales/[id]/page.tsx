@@ -263,7 +263,7 @@ export default function SaleDetailPage() {
 
         {/* Información general */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white/[0.03] backdrop-blur-2xl border border-white/[0.06] rounded-2xl p-6 shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
+          <div className="neu-elevated border-0 rounded-2xl p-6">
             <h3 className="text-lg font-semibold text-white mb-4">Información General</h3>
             <div className="space-y-3">
               <div className="flex justify-between">
@@ -287,7 +287,7 @@ export default function SaleDetailPage() {
             </div>
           </div>
 
-          <div className="bg-white/[0.03] backdrop-blur-2xl border border-white/[0.06] rounded-2xl p-6 shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
+          <div className="neu-elevated border-0 rounded-2xl p-6">
             <h3 className="text-lg font-semibold text-white mb-4">Resumen</h3>
             <div className="space-y-3">
               <div className="flex justify-between text-lg">
@@ -303,7 +303,7 @@ export default function SaleDetailPage() {
         </div>
 
         {/* Items de la venta */}
-        <div className="bg-white/[0.03] backdrop-blur-2xl border border-white/[0.06] rounded-2xl p-6 shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
+        <div className="neu-elevated border-0 rounded-2xl p-6">
           <h3 className="text-lg font-semibold text-white mb-4">Productos</h3>
           <div className="space-y-3">
             {sale.sale_items && sale.sale_items.length > 0 ? (
@@ -375,8 +375,8 @@ export default function SaleDetailPage() {
 
         {/* Diálogo de confirmación */}
         {showConfirmDialog && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-            <div className="bg-white/[0.08] backdrop-blur-2xl border border-white/[0.12] rounded-2xl p-6 max-w-md w-full mx-4 shadow-[0_20px_60px_rgba(0,0,0,0.9)]">
+          <div className="fixed inset-0 bg-background/90 flex items-center justify-center z-50">
+            <div className="neu-elevated border-0 rounded-2xl p-6 max-w-md w-full mx-4">
               <div className="flex items-start gap-4 mb-4">
                 <div className="p-2 bg-yellow-500/20 rounded-lg">
                   <AlertTriangle className="h-6 w-6 text-yellow-400" />
@@ -420,8 +420,8 @@ export default function SaleDetailPage() {
 
         {/* Diálogo de cancelación */}
         {showCancelDialog && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-            <div className="bg-white/[0.08] backdrop-blur-2xl border border-white/[0.12] rounded-2xl p-6 max-w-md w-full mx-4 shadow-[0_20px_60px_rgba(0,0,0,0.9)]">
+          <div className="fixed inset-0 bg-background/90 flex items-center justify-center z-50">
+            <div className="neu-elevated border-0 rounded-2xl p-6 max-w-md w-full mx-4">
               <div className="flex items-start gap-4 mb-4">
                 <div className="p-2 bg-red-500/20 rounded-lg">
                   <AlertTriangle className="h-6 w-6 text-red-400" />

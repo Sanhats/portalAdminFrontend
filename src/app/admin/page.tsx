@@ -1,13 +1,15 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { StatCard } from "@/components/stat-card"
-import { DataTable } from "@/components/data-table"
-import { PackageIcon, CartIcon, UsersIcon, ChartIcon } from "@/components/icons/custom-icons"
+import LoadingSpinner from "@/components/LoadingSpinner"
+import { PackageIcon, CartIcon, GridIcon, ChartIcon, TrendUpIcon } from "@/components/icons/custom-icons"
+import { AlertTriangle, TrendingUp } from "lucide-react"
 import { api } from "@/lib/api-client"
+import { cn } from "@/lib/utils"
 
 interface DashboardStat {
   title: string
@@ -21,46 +23,53 @@ interface DashboardStat {
   }
 }
 
-interface RecentProduct {
-  id: string
-  name: string
-  category: string
-  price: string
-  stock: number
-  status: "Active" | "Low Stock" | "Out of Stock"
-}
-
 const INITIAL_STATS: DashboardStat[] = [
   {
     title: "Total productos",
     value: "-",
-    description: "No hay estadísticas por el momento",
+    description: "Productos en el catálogo",
     icon: PackageIcon,
-    iconColor: "bg-white/[0.06]",
+    iconColor: "neu-flat",
     trend: undefined,
   },
   {
-    title: "Total órdenes",
+    title: "Stock bajo",
     value: "-",
-    description: "No hay estadísticas por el momento",
+    description: "Productos con stock < 10",
+    icon: AlertTriangle,
+    iconColor: "neu-flat",
+    trend: undefined,
+  },
+  {
+    title: "Categorías",
+    value: "-",
+    description: "Categorías activas",
+    icon: GridIcon,
+    iconColor: "neu-flat",
+    trend: undefined,
+  },
+  {
+    title: "Total ventas",
+    value: "-",
+    description: "Ventas registradas",
     icon: CartIcon,
-    iconColor: "bg-white/[0.06]",
+    iconColor: "neu-flat",
     trend: undefined,
   },
   {
-    title: "Clientes",
+    title: "Ingresos totales",
     value: "-",
-    description: "No hay estadísticas por el momento",
-    icon: UsersIcon,
-    iconColor: "bg-white/[0.06]",
-    trend: undefined,
-  },
-  {
-    title: "Ingresos",
-    value: "-",
-    description: "No hay estadísticas por el momento",
+    description: "Suma de ventas pagadas",
     icon: ChartIcon,
-    iconColor: "bg-white/[0.06]",
+    iconColor: "neu-flat",
+    trend: undefined,
+  },
+  {
+    title: "Ventas del mes",
+    value: "-",
+    description: "Ventas del mes actual",
+    icon: TrendingUp,
+    iconColor: "neu-flat",
     trend: undefined,
   },
 ]
@@ -68,79 +77,86 @@ const INITIAL_STATS: DashboardStat[] = [
 export default function AdminHome() {
   const router = useRouter()
   const [stats, setStats] = useState<DashboardStat[]>(INITIAL_STATS)
-  const [recentProducts, setRecentProducts] = useState<RecentProduct[]>([])
   const [loading, setLoading] = useState<boolean>(true)
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("es-AR", {
+      style: "currency",
+      currency: "ARS",
+      maximumFractionDigits: 0,
+    }).format(amount)
+  }
 
   const loadDashboard = useCallback(async () => {
     setLoading(true)
     try {
-      const data: any = await api.getProducts({ page: 1, limit: 5 })
-
+      // Cargar productos
+      const productsData: any = await api.getProducts({ page: 1, limit: 1000 })
       let productsArray: any[] = []
-      if (Array.isArray(data)) {
-        productsArray = data
-      } else if (data && Array.isArray(data.data)) {
-        productsArray = data.data
-      } else if (data && Array.isArray(data.products)) {
-        productsArray = data.products
+      if (Array.isArray(productsData)) {
+        productsArray = productsData
+      } else if (productsData && Array.isArray(productsData.data)) {
+        productsArray = productsData.data
+      } else if (productsData && Array.isArray(productsData.products)) {
+        productsArray = productsData.products
       }
 
-      const normalizedProducts: RecentProduct[] = productsArray.map((product: any) => {
-        const categoryName =
-          product.categories?.name ||
-          product.category?.name ||
-          product.category_name ||
-          product.categoryName ||
-          "Sin categoría"
+      // Cargar categorías
+      const categoriesData: any = await api.getCategories()
+      const categoriesArray = Array.isArray(categoriesData) ? categoriesData : []
 
-        const priceNumber = Number(product.price ?? 0)
-        const priceFormatted = isNaN(priceNumber)
-          ? "-"
-          : new Intl.NumberFormat("es-MX", {
-              style: "currency",
-              currency: "MXN",
-              maximumFractionDigits: 0,
-            }).format(priceNumber)
-
-        let status: RecentProduct["status"] = "Active"
-        if (product.stock === 0) {
-          status = "Out of Stock"
-        } else if (product.stock < 10) {
-          status = "Low Stock"
-        }
-
-        return {
-          id: String(product.id),
-          name: product.name,
-          category: categoryName,
-          price: priceFormatted,
-          stock: Number(product.stock ?? 0),
-          status,
-        }
-      })
-
-      setRecentProducts(normalizedProducts)
-
-      let totalProducts = normalizedProducts.length
-      if (data?.pagination?.total) {
-        totalProducts = data.pagination.total
-      } else if (typeof data?.total === "number") {
-        totalProducts = data.total
+      // Cargar ventas
+      const salesData: any = await api.getSales({ page: 1, limit: 1000 })
+      let salesArray: any[] = []
+      if (Array.isArray(salesData)) {
+        salesArray = salesData
+      } else if (salesData && Array.isArray(salesData.data)) {
+        salesArray = salesData.data
       }
 
+      // Calcular métricas
+      const totalProducts = productsData?.pagination?.total || productsData?.total || productsArray.length
+      const lowStockProducts = productsArray.filter((p: any) => (p.stock ?? 0) > 0 && (p.stock ?? 0) < 10).length
+      const totalCategories = categoriesArray.length
+      const totalSales = salesArray.length
+
+      // Calcular ingresos totales (solo ventas pagadas)
+      const totalRevenue = salesArray
+        .filter((sale: any) => sale.status === 'paid' || sale.payment_status === 'paid')
+        .reduce((sum: number, sale: any) => sum + parseFloat(sale.total_amount || 0), 0)
+
+      // Calcular ventas del mes actual
+      const now = new Date()
+      const currentMonth = now.getMonth()
+      const currentYear = now.getFullYear()
+      const monthlySales = salesArray.filter((sale: any) => {
+        const saleDate = new Date(sale.created_at)
+        return saleDate.getMonth() === currentMonth && saleDate.getFullYear() === currentYear
+      }).length
+
+      // Actualizar estadísticas
       setStats((prev) =>
-        prev.map((stat) =>
-          stat.title === "Total productos"
-            ? {
-                ...stat,
-                value: totalProducts.toLocaleString("es-MX"),
-              }
-            : stat,
-        ),
+        prev.map((stat) => {
+          switch (stat.title) {
+            case "Total productos":
+              return { ...stat, value: totalProducts.toLocaleString("es-AR") }
+            case "Stock bajo":
+              return { ...stat, value: lowStockProducts.toLocaleString("es-AR") }
+            case "Categorías":
+              return { ...stat, value: totalCategories.toLocaleString("es-AR") }
+            case "Total ventas":
+              return { ...stat, value: totalSales.toLocaleString("es-AR") }
+            case "Ingresos totales":
+              return { ...stat, value: formatCurrency(totalRevenue) }
+            case "Ventas del mes":
+              return { ...stat, value: monthlySales.toLocaleString("es-AR") }
+            default:
+              return stat
+          }
+        }),
       )
     } catch (error) {
       console.error("Error al cargar dashboard admin:", error)
-      setRecentProducts([])
       setStats(INITIAL_STATS)
     } finally {
       setLoading(false)
@@ -151,88 +167,85 @@ export default function AdminHome() {
     loadDashboard()
   }, [loadDashboard])
 
-  const productColumns = useMemo(
-    () => [
-      { key: "name", label: "Producto" },
-      { key: "category", label: "Categoría" },
-      { key: "price", label: "Precio" },
-      { key: "stock", label: "Stock" },
-      {
-        key: "status",
-        label: "Estado",
-        render: (item: RecentProduct) => (
-          <span
-            className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-tight border ${
-              item.status === "Active"
-                ? "bg-white/[0.1] text-white/80 border-white/[0.15]"
-                : item.status === "Low Stock"
-                  ? "bg-amber-500/10 text-amber-200 border-amber-500/40"
-                  : "bg-red-500/10 text-red-200 border-red-500/40"
-            }`}
-          >
-            {item.status === "Active"
-              ? "Activo"
-              : item.status === "Low Stock"
-                ? "Stock bajo"
-                : "Sin stock"}
-          </span>
-        ),
-      },
-    ],
-    [],
-  )
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <LoadingSpinner />
+      </DashboardLayout>
+    )
+  }
 
   return (
     <DashboardLayout>
-      <div className="space-y-10">
-        <div className="space-y-4">
-          <h1 className="font-serif text-[28px] sm:text-[36px] lg:text-[44px] font-semibold tracking-[-0.03em] text-white leading-[1.1]">
-            Panel de administración
-          </h1>
-          <div className="ornamental-divider w-24" />
-          <p className="text-[15px] font-light text-white/45 leading-relaxed tracking-[-0.005em] max-w-xl">
-            Resumen de tu catálogo y acceso rápido a la gestión de productos.
-          </p>
-        </div>
+      <div className="space-y-8">
+        {/* Header */}
+        
 
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Métricas principales */}
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {stats.map((stat) => (
             <StatCard key={stat.title} {...stat} />
           ))}
         </div>
 
-        <div className="space-y-5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-            <h2 className="font-serif text-[22px] sm:text-[26px] lg:text-[32px] font-semibold text-white tracking-[-0.02em] leading-tight">
-                Productos recientes
-              </h2>
-              <p className="mt-2 text-[14px] font-light text-white/45 tracking-[-0.005em]">
-                Últimos productos cargados en tu catálogo
-              </p>
+        {/* Accesos rápidos */}
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <button
+            type="button"
+            onClick={() => router.push("/admin/products")}
+            className={cn(
+              "neu-elevated neu-hover neu-active p-6 rounded-[var(--radius)] text-left transition-all duration-300",
+              "hover:scale-[1.02]"
+            )}
+          >
+            <div className="flex items-center gap-4">
+              <div className="neu-pressed p-3 rounded-[var(--radius)]">
+                <PackageIcon className="h-6 w-6 text-foreground" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-foreground">Gestionar Productos</h3>
+                <p className="text-sm text-muted-foreground mt-1">Ver y editar tu catálogo</p>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={() => router.push("/admin/products")}
-              className="rounded-full border border-white/15 bg-white/[0.03] px-4 py-1.5 text-[13px] font-medium text-white/80 backdrop-blur-md transition hover:bg-white/[0.08]"
-            >
-              Ver todos los productos
-            </button>
-          </div>
+          </button>
 
-          <DataTable
-            data={recentProducts}
-            columns={productColumns}
-            onView={() => router.push("/admin/products")}
-            onEdit={() => router.push("/admin/products")}
-            onDelete={() => router.push("/admin/products")}
-          />
+          <button
+            type="button"
+            onClick={() => router.push("/admin/categories")}
+            className={cn(
+              "neu-elevated neu-hover neu-active p-6 rounded-[var(--radius)] text-left transition-all duration-300",
+              "hover:scale-[1.02]"
+            )}
+          >
+            <div className="flex items-center gap-4">
+              <div className="neu-pressed p-3 rounded-[var(--radius)]">
+                <GridIcon className="h-6 w-6 text-foreground" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-foreground">Gestionar Categorías</h3>
+                <p className="text-sm text-muted-foreground mt-1">Organiza tus productos</p>
+              </div>
+            </div>
+          </button>
 
-          {loading && (
-            <p className="text-[13px] text-white/40 mt-2">
-              Cargando datos del panel...
-            </p>
-          )}
+          <button
+            type="button"
+            onClick={() => router.push("/admin/sales")}
+            className={cn(
+              "neu-elevated neu-hover neu-active p-6 rounded-[var(--radius)] text-left transition-all duration-300",
+              "hover:scale-[1.02]"
+            )}
+          >
+            <div className="flex items-center gap-4">
+              <div className="neu-pressed p-3 rounded-[var(--radius)]">
+                <CartIcon className="h-6 w-6 text-foreground" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-foreground">Ver Ventas</h3>
+                <p className="text-sm text-muted-foreground mt-1">Historial de ventas</p>
+              </div>
+            </div>
+          </button>
         </div>
       </div>
     </DashboardLayout>

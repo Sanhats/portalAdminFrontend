@@ -7,10 +7,12 @@ import { api } from "@/lib/api-client";
 import Notification from "@/components/Notification";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { DataTable } from "@/components/data-table";
+import LoadingSpinner from "@/components/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select } from "@/components/ui/select";
 
 type LoadMode = "selector" | "quick" | "full" | "csv" | null;
 type ProductStatus = "draft" | "active" | "hidden";
@@ -1038,14 +1040,14 @@ export default function ProductsPage() {
               handleToggleFeaturedClick(item.raw);
             }}
             disabled={togglingFeatured === item.id}
-            className="h-8 w-8 p-0 hover:bg-white/[0.08] text-white/60 hover:text-white disabled:opacity-50"
+            className="h-8 w-8 p-0 neu-flat neu-hover neu-active text-muted-foreground hover:text-foreground disabled:opacity-50"
             title={item.isFeatured ? "Quitar de destacados" : "Marcar como destacado"}
           >
             <Star
               className={`h-4 w-4 ${
                 item.isFeatured
-                  ? "fill-white/60 text-white/60"
-                  : "text-white/40"
+                  ? "fill-foreground text-foreground"
+                  : "text-muted-foreground"
               }`}
             />
           </Button>
@@ -1063,7 +1065,7 @@ export default function ProductsPage() {
             ? "text-red-400" 
             : stock < 10 
             ? "text-orange-400" 
-            : "text-white/70";
+            : "text-muted-foreground";
           
           return (
             <div className="flex items-center gap-2">
@@ -1077,7 +1079,7 @@ export default function ProductsPage() {
                     e.stopPropagation();
                     handleOpenAdjustment(item.raw);
                   }}
-                  className="h-7 w-7 p-0 hover:bg-white/[0.08] text-white/60 hover:text-white"
+                  className="h-7 w-7 p-0 neu-flat neu-hover neu-active text-muted-foreground hover:text-foreground"
                   title="Ajustar stock"
                 >
                   <Plus className="h-3.5 w-3.5" />
@@ -1090,7 +1092,7 @@ export default function ProductsPage() {
                     e.stopPropagation();
                     handleOpenHistory(item.raw);
                   }}
-                  className="h-7 w-7 p-0 hover:bg-white/[0.08] text-white/60 hover:text-white"
+                  className="h-7 w-7 p-0 neu-flat neu-hover neu-active text-muted-foreground hover:text-foreground"
                   title="Ver historial"
                 >
                   <History className="h-3.5 w-3.5" />
@@ -1105,7 +1107,7 @@ export default function ProductsPage() {
         label: "Estado",
         render: (item: TableProduct) => {
           const statusConfig = {
-            "Active": { label: "Activo", className: "bg-white/10 text-white/80 border-white/20" },
+            "Active": { label: "Activo", className: "neu-elevated text-foreground" },
             "Low Stock": { label: "Stock bajo", className: "bg-orange-500/20 text-orange-300 border-orange-500/40" },
             "Out of Stock": { label: "Sin stock", className: "bg-red-500/10 text-red-200 border-red-500/40" },
             "Borrador": { label: "Borrador", className: "bg-gray-500/10 text-gray-200 border-gray-500/40" },
@@ -1143,7 +1145,7 @@ export default function ProductsPage() {
         <div className="flex justify-center">
           <Button
             onClick={() => setLoadMode("selector")}
-            className="bg-white/[0.12] hover:bg-white/[0.16] backdrop-blur-md border border-white/[0.15] text-white shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-all duration-300 hover:shadow-[0_12px_40px_rgba(0,0,0,0.5)] rounded-xl px-6 py-3 h-auto text-base font-medium"
+            className="neu-elevated neu-hover neu-active text-foreground transition-all duration-300 rounded-xl px-6 py-3 h-auto text-base font-medium"
           >
             <Plus className="mr-2 h-5 w-5" />
             Nuevo producto
@@ -1152,25 +1154,22 @@ export default function ProductsPage() {
 
         {/* Search and Filters */}
         <form onSubmit={handleSearch} className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             type="text"
             placeholder="Buscar productos por nombre..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-11 pl-11 bg-white/[0.03] backdrop-blur-xl border-white/[0.08] rounded-xl text-white placeholder:text-white/40 focus:border-white/[0.15] focus:bg-white/[0.05] transition-all"
+            className="h-11 pl-11 neu-pressed rounded-xl text-foreground placeholder:text-muted-foreground focus:neu-elevated transition-all"
           />
         </form>
 
         {/* Products Table */}
         <div className="space-y-5">
           {loading ? (
-            <div className="p-8 text-center text-white/60">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-white/70"></div>
-              <p className="mt-2 text-sm">Cargando productos...</p>
-            </div>
+            <LoadingSpinner />
           ) : tableData.length === 0 ? (
-            <div className="p-8 text-center text-white/60 bg-white/[0.03] border border-white/[0.06] rounded-2xl backdrop-blur-xl">
+            <div className="p-8 text-center text-muted-foreground neu-pressed rounded-2xl">
               No hay productos disponibles.
             </div>
           ) : (
@@ -1185,12 +1184,12 @@ export default function ProductsPage() {
 
               {/* Mostrar paginación si hay más de una página o si tenemos el límite completo de productos */}
               {(totalPages > 1 || tableData.length >= limit) && (
-                <div className="flex items-center justify-between text-white/70 text-sm pt-4">
+                <div className="flex items-center justify-between text-muted-foreground text-sm pt-4">
                   <div>
                     Página <span className="font-medium">{page}</span> de{" "}
                     <span className="font-medium">{totalPages}</span>
                     {tableData.length > 0 && (
-                      <span className="ml-2 text-white/50">
+                      <span className="ml-2 text-muted-foreground">
                         ({tableData.length} producto{tableData.length === 1 ? "" : "s"} en esta página)
                       </span>
                     )}
@@ -1206,7 +1205,7 @@ export default function ProductsPage() {
                           setPage(page - 1);
                         }
                       }}
-                      className="border-white/20 text-white/80 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="neu-flat text-foreground hover:neu-elevated disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Anterior
                     </Button>
@@ -1220,7 +1219,7 @@ export default function ProductsPage() {
                           setPage(page + 1);
                         }
                       }}
-                      className="border-white/20 text-white/80 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="neu-flat text-foreground hover:neu-elevated disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Siguiente
                     </Button>
@@ -1235,7 +1234,7 @@ export default function ProductsPage() {
         <div className="flex justify-center items-center gap-3 pt-6">
           
           {loadAllProducts && allProducts.length > 0 && (
-            <span className="text-xs text-white/50">
+            <span className="text-xs text-muted-foreground">
               ({allProducts.length} productos cargados)
             </span>
           )}
@@ -1246,10 +1245,10 @@ export default function ProductsPage() {
       {loadMode === "selector" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div
-            className="absolute inset-0 bg-black/80 backdrop-blur-md"
+            className="absolute inset-0 bg-background/90"
             onClick={() => setLoadMode(null)}
           />
-          <div className="relative w-full max-w-3xl rounded-2xl bg-black/60 backdrop-blur-2xl border border-white/[0.12] shadow-[0_32px_80px_rgba(0,0,0,0.9)] animate-in zoom-in-95 duration-300">
+          <div className="relative w-full max-w-3xl rounded-2xl neu-elevated animate-in zoom-in-95 duration-300">
             <div className="p-8">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="font-serif text-[32px] font-semibold tracking-[-0.02em] text-white leading-tight">
@@ -1259,7 +1258,7 @@ export default function ProductsPage() {
                   onClick={() => setLoadMode(null)}
                   variant="ghost"
                   size="icon"
-                  className="h-9 w-9 rounded-xl hover:bg-white/[0.08] text-white/60 hover:text-white transition-all"
+                  className="h-9 w-9 rounded-xl neu-flat neu-hover neu-active text-muted-foreground hover:text-foreground transition-all"
                 >
                   <X className="h-5 w-5" />
                 </Button>
@@ -1269,18 +1268,18 @@ export default function ProductsPage() {
                 {/* Carga Rápida */}
                 <button
                   onClick={() => openCreateModal("quick")}
-                  className="p-6 rounded-xl bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] hover:border-white/[0.15] transition-all text-left group"
+                  className="p-6 rounded-xl neu-flat neu-hover neu-active transition-all text-left group"
                 >
                   <div className="flex items-center gap-3 mb-4">
                     <div className="p-3 rounded-lg bg-blue-500/10 group-hover:bg-blue-500/20 transition-colors">
                       <Zap className="h-6 w-6 text-blue-400" />
                     </div>
-                    <h3 className="font-semibold text-white text-lg">Carga rápida</h3>
+                    <h3 className="font-semibold text-foreground text-lg">Carga rápida</h3>
                   </div>
-                  <p className="text-white/60 text-sm mb-4">
+                  <p className="text-muted-foreground text-sm mb-4">
                     Campos esenciales: nombre, precio, stock y categoría. Ideal para cargar productos rápidamente.
                   </p>
-                  <ul className="text-white/50 text-xs space-y-1">
+                  <ul className="text-muted-foreground text-xs space-y-1">
                     <li>• Nombre</li>
                     <li>• Precio</li>
                     <li>• Stock inicial</li>
@@ -1291,18 +1290,18 @@ export default function ProductsPage() {
                 {/* Carga Completa */}
                 <button
                   onClick={() => openCreateModal("full")}
-                  className="p-6 rounded-xl bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] hover:border-white/[0.15] transition-all text-left group"
+                  className="p-6 rounded-xl neu-flat neu-hover neu-active transition-all text-left group"
                 >
                   <div className="flex items-center gap-3 mb-4">
                     <div className="p-3 rounded-lg bg-purple-500/10 group-hover:bg-purple-500/20 transition-colors">
                       <FileText className="h-6 w-6 text-purple-400" />
                     </div>
-                    <h3 className="font-semibold text-white text-lg">Carga completa</h3>
+                    <h3 className="font-semibold text-foreground text-lg">Carga completa</h3>
                   </div>
-                  <p className="text-white/60 text-sm mb-4">
+                  <p className="text-muted-foreground text-sm mb-4">
                     Todos los campos disponibles: descripción, imágenes, variantes, SEO y más.
                   </p>
-                  <ul className="text-white/50 text-xs space-y-1">
+                  <ul className="text-muted-foreground text-xs space-y-1">
                     <li>• Todos los campos</li>
                     <li>• Variantes</li>
                     <li>• Imágenes</li>
@@ -1313,18 +1312,18 @@ export default function ProductsPage() {
                 {/* Importación CSV */}
                 <button
                   onClick={() => setLoadMode("csv")}
-                  className="p-6 rounded-xl bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] hover:border-white/[0.15] transition-all text-left group"
+                  className="p-6 rounded-xl neu-flat neu-hover neu-active transition-all text-left group"
                 >
                   <div className="flex items-center gap-3 mb-4">
                     <div className="p-3 rounded-lg bg-white/10 group-hover:bg-white/20 transition-colors">
                       <FileSpreadsheet className="h-6 w-6 text-white/60" />
                     </div>
-                    <h3 className="font-semibold text-white text-lg">Importación masiva</h3>
+                    <h3 className="font-semibold text-foreground text-lg">Importación masiva</h3>
                   </div>
-                  <p className="text-white/60 text-sm mb-4">
+                  <p className="text-muted-foreground text-sm mb-4">
                     Sube un archivo CSV con múltiples productos para importarlos de una vez.
                   </p>
-                  <ul className="text-white/50 text-xs space-y-1">
+                  <ul className="text-muted-foreground text-xs space-y-1">
                     <li>• Upload archivo CSV</li>
                     <li>• Preview de datos</li>
                     <li>• Confirmar importación</li>
@@ -1340,11 +1339,11 @@ export default function ProductsPage() {
       {loadMode === "quick" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div
-            className="absolute inset-0 bg-black/80 backdrop-blur-md"
+            className="absolute inset-0 bg-background/90"
             onClick={() => !saving && setLoadMode(null)}
           />
-          <div className="relative w-full max-w-lg rounded-2xl bg-black/60 backdrop-blur-2xl border border-white/[0.12] shadow-[0_32px_80px_rgba(0,0,0,0.9)] animate-in zoom-in-95 duration-300">
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/[0.08] bg-black/40 backdrop-blur-xl p-6">
+          <div className="relative w-full max-w-lg rounded-2xl neu-elevated animate-in zoom-in-95 duration-300">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b-0 neu-pressed p-6 rounded-t-2xl">
               <div>
                 <h2 className="font-serif text-[28px] font-semibold tracking-[-0.02em] text-white leading-tight">
                   Carga rápida
@@ -1355,7 +1354,7 @@ export default function ProductsPage() {
                 onClick={() => !saving && setLoadMode(null)}
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 rounded-xl hover:bg-white/[0.08] text-white/60 hover:text-white transition-all"
+                className="h-9 w-9 rounded-xl neu-flat neu-hover neu-active text-muted-foreground hover:text-foreground transition-all"
               >
                 <X className="h-5 w-5" />
               </Button>
@@ -1377,8 +1376,8 @@ export default function ProductsPage() {
                       setFieldErrors(prev => ({ ...prev, name: error || "" }));
                     }
                   }}
-                  className={`h-11 bg-white/[0.04] backdrop-blur-xl border rounded-xl text-white placeholder:text-white/40 focus:bg-white/[0.06] transition-all ${
-                    fieldErrors.name ? "border-red-500/50 focus:border-red-500" : "border-white/[0.1] focus:border-white/[0.2]"
+                  className={`h-11 neu-pressed border-0 rounded-xl text-white placeholder:text-white/40 focus:neu-elevated transition-all ${
+                    fieldErrors.name ? "border-red-500/50 focus:border-red-500" : "border-0 focus:neu-elevated"
                   }`}
                   placeholder="Ej: iPhone 15 Pro"
                 />
@@ -1408,8 +1407,8 @@ export default function ProductsPage() {
                         setFieldErrors(prev => ({ ...prev, price: error || "" }));
                       }
                     }}
-                    className={`h-11 bg-white/[0.04] backdrop-blur-xl border rounded-xl text-white placeholder:text-white/40 focus:bg-white/[0.06] transition-all ${
-                      fieldErrors.price ? "border-red-500/50 focus:border-red-500" : "border-white/[0.1] focus:border-white/[0.2]"
+                    className={`h-11 neu-pressed border-0 rounded-xl text-white placeholder:text-white/40 focus:neu-elevated transition-all ${
+                      fieldErrors.price ? "border-red-500/50 focus:border-red-500" : "border-0 focus:neu-elevated"
                     }`}
                     placeholder="0.00"
                   />
@@ -1435,8 +1434,8 @@ export default function ProductsPage() {
                         setFieldErrors(prev => ({ ...prev, stock: error || "" }));
                       }
                     }}
-                    className={`h-11 bg-white/[0.04] backdrop-blur-xl border rounded-xl text-white placeholder:text-white/40 focus:bg-white/[0.06] transition-all ${
-                      fieldErrors.stock ? "border-red-500/50 focus:border-red-500" : "border-white/[0.1] focus:border-white/[0.2]"
+                    className={`h-11 neu-pressed border-0 rounded-xl text-white placeholder:text-white/40 focus:neu-elevated transition-all ${
+                      fieldErrors.stock ? "border-red-500/50 focus:border-red-500" : "border-0 focus:neu-elevated"
                     }`}
                     placeholder="0"
                   />
@@ -1451,10 +1450,10 @@ export default function ProductsPage() {
 
               {/* Categoría */}
               <div className="space-y-2">
-                <Label htmlFor="category" className="text-[13px] font-medium text-white/70 tracking-[-0.005em]">
+                <Label htmlFor="category" className="text-[13px] font-medium text-foreground tracking-[-0.005em]">
                   Categoría <span className="text-red-400">*</span>
                 </Label>
-                <select
+                <Select
                   id="category"
                   value={formData.categoryId || ""}
                   onChange={(e) => {
@@ -1464,19 +1463,15 @@ export default function ProductsPage() {
                       setFieldErrors(prev => ({ ...prev, categoryId: error || "" }));
                     }
                   }}
-                  className={`w-full h-11 px-4 bg-white/[0.04] backdrop-blur-xl border rounded-xl text-white transition-all appearance-none cursor-pointer focus:outline-none focus:bg-white/[0.06] ${
-                    fieldErrors.categoryId ? "border-red-500/50 focus:border-red-500" : "border-white/[0.1] focus:border-white/[0.2]"
-                  }`}
+                  error={!!fieldErrors.categoryId}
                 >
-                  <option value="" className="bg-black text-white/60">
-                    Seleccionar categoría
-                  </option>
+                  <option value="">Seleccionar categoría</option>
                   {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id} className="bg-black text-white">
+                    <option key={cat.id} value={cat.id}>
                       {cat.name}
                     </option>
                   ))}
-                </select>
+                </Select>
                 {fieldErrors.categoryId && (
                   <p className="text-red-400 text-xs flex items-center gap-1">
                     <AlertTriangle className="h-3 w-3" />
@@ -1498,8 +1493,8 @@ export default function ProductsPage() {
                       onClick={() => setFormData({ ...formData, status })}
                       className={`p-3 rounded-lg border transition-all text-sm font-medium ${
                         formData.status === status
-                          ? "bg-white/[0.12] border-white/[0.3] text-white"
-                          : "bg-white/[0.04] border-white/[0.1] text-white/60 hover:bg-white/[0.06]"
+                          ? "neu-elevated text-foreground"
+                          : "neu-flat text-muted-foreground hover:neu-elevated"
                       }`}
                     >
                       {status === "draft" ? "Borrador" : status === "active" ? "Activo" : "Oculto"}
@@ -1509,11 +1504,11 @@ export default function ProductsPage() {
               </div>
 
               {/* Actions */}
-              <div className="flex flex-col gap-3 pt-4 border-t border-white/[0.08]">
+              <div className="flex flex-col gap-3 pt-4 border-t-0 neu-pressed pt-4">
                 <Button
                   type="submit"
                   disabled={saving}
-                  className="w-full h-11 bg-white/[0.12] hover:bg-white/[0.16] backdrop-blur-md border border-white/[0.15] text-white shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-all duration-300 hover:shadow-[0_12px_40px_rgba(0,0,0,0.5)] rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full h-11 neu-elevated neu-hover neu-active text-foreground transition-all duration-300 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {saving ? (
                     <>
@@ -1534,7 +1529,7 @@ export default function ProductsPage() {
                     handleSubmit({ preventDefault: () => {} } as React.FormEvent);
                   }}
                   disabled={saving}
-                  className="w-full h-11 bg-blue-500/20 hover:bg-blue-500/30 backdrop-blur-md border border-blue-500/30 text-blue-200 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  className="w-full h-11 neu-elevated neu-hover neu-active text-primary rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
                   {saving ? (
                     <>
@@ -1553,7 +1548,7 @@ export default function ProductsPage() {
                   onClick={() => !saving && setLoadMode(null)}
                   disabled={saving}
                   variant="outline"
-                  className="w-full h-11 bg-white/[0.03] hover:bg-white/[0.06] backdrop-blur-md border-white/[0.1] text-white/80 hover:text-white rounded-xl font-medium transition-all disabled:opacity-50"
+                  className="w-full h-11 neu-flat neu-hover neu-active text-muted-foreground hover:text-foreground rounded-xl font-medium transition-all disabled:opacity-50"
                 >
                   Cancelar
                 </Button>
@@ -1567,19 +1562,19 @@ export default function ProductsPage() {
       {loadMode === "full" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div
-            className="absolute inset-0 bg-black/80 backdrop-blur-md"
+            className="absolute inset-0 bg-background/90"
             onClick={() => !saving && setLoadMode(null)}
           />
-          <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-black/60 backdrop-blur-2xl border border-white/[0.12] shadow-[0_32px_80px_rgba(0,0,0,0.9)] animate-in zoom-in-95 duration-300">
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/[0.08] bg-black/40 backdrop-blur-xl p-6">
-              <h2 className="font-serif text-[32px] font-semibold tracking-[-0.02em] text-white leading-tight">
+          <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl neu-elevated animate-in zoom-in-95 duration-300">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b-0 neu-pressed p-6 rounded-t-2xl">
+              <h2 className="font-serif text-[32px] font-semibold tracking-[-0.02em] text-foreground leading-tight">
                 {editingProduct ? "Editar producto" : "Nuevo producto"}
               </h2>
               <Button
                 onClick={() => !saving && setLoadMode(null)}
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 rounded-xl hover:bg-white/[0.08] text-white/60 hover:text-white transition-all"
+                className="h-9 w-9 rounded-xl neu-flat neu-hover neu-active text-muted-foreground hover:text-foreground transition-all"
               >
                 <X className="h-5 w-5" />
               </Button>
@@ -1601,8 +1596,8 @@ export default function ProductsPage() {
                       setFieldErrors(prev => ({ ...prev, name: error || "" }));
                     }
                   }}
-                  className={`h-11 bg-white/[0.04] backdrop-blur-xl border rounded-xl text-white placeholder:text-white/40 focus:bg-white/[0.06] transition-all ${
-                    fieldErrors.name ? "border-red-500/50 focus:border-red-500" : "border-white/[0.1] focus:border-white/[0.2]"
+                  className={`h-11 neu-pressed border-0 rounded-xl text-white placeholder:text-white/40 focus:neu-elevated transition-all ${
+                    fieldErrors.name ? "border-red-500/50 focus:border-red-500" : "border-0 focus:neu-elevated"
                   }`}
                   placeholder="Ej: iPhone 15 Pro"
                 />
@@ -1632,8 +1627,8 @@ export default function ProductsPage() {
                         setFieldErrors(prev => ({ ...prev, price: error || "" }));
                       }
                     }}
-                    className={`h-11 bg-white/[0.04] backdrop-blur-xl border rounded-xl text-white placeholder:text-white/40 focus:bg-white/[0.06] transition-all ${
-                      fieldErrors.price ? "border-red-500/50 focus:border-red-500" : "border-white/[0.1] focus:border-white/[0.2]"
+                    className={`h-11 neu-pressed border-0 rounded-xl text-white placeholder:text-white/40 focus:neu-elevated transition-all ${
+                      fieldErrors.price ? "border-red-500/50 focus:border-red-500" : "border-0 focus:neu-elevated"
                     }`}
                     placeholder="0.00"
                   />
@@ -1659,8 +1654,8 @@ export default function ProductsPage() {
                         setFieldErrors(prev => ({ ...prev, stock: error || "" }));
                       }
                     }}
-                    className={`h-11 bg-white/[0.04] backdrop-blur-xl border rounded-xl text-white placeholder:text-white/40 focus:bg-white/[0.06] transition-all ${
-                      fieldErrors.stock ? "border-red-500/50 focus:border-red-500" : "border-white/[0.1] focus:border-white/[0.2]"
+                    className={`h-11 neu-pressed border-0 rounded-xl text-white placeholder:text-white/40 focus:neu-elevated transition-all ${
+                      fieldErrors.stock ? "border-red-500/50 focus:border-red-500" : "border-0 focus:neu-elevated"
                     }`}
                     placeholder="0"
                   />
@@ -1675,10 +1670,10 @@ export default function ProductsPage() {
 
               {/* Categoría */}
               <div className="space-y-2">
-                <Label htmlFor="category-full" className="text-[13px] font-medium text-white/70 tracking-[-0.005em]">
+                <Label htmlFor="category-full" className="text-[13px] font-medium text-foreground tracking-[-0.005em]">
                   Categoría <span className="text-red-400">*</span>
                 </Label>
-                <select
+                <Select
                   id="category-full"
                   value={formData.categoryId || ""}
                   onChange={(e) => {
@@ -1688,19 +1683,15 @@ export default function ProductsPage() {
                       setFieldErrors(prev => ({ ...prev, categoryId: error || "" }));
                     }
                   }}
-                  className={`w-full h-11 px-4 bg-white/[0.04] backdrop-blur-xl border rounded-xl text-white transition-all appearance-none cursor-pointer focus:outline-none focus:bg-white/[0.06] ${
-                    fieldErrors.categoryId ? "border-red-500/50 focus:border-red-500" : "border-white/[0.1] focus:border-white/[0.2]"
-                  }`}
+                  error={!!fieldErrors.categoryId}
                 >
-                  <option value="" className="bg-black text-white/60">
-                    Seleccionar categoría
-                  </option>
+                  <option value="">Seleccionar categoría</option>
                   {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id} className="bg-black text-white">
+                    <option key={cat.id} value={cat.id}>
                       {cat.name}
                     </option>
                   ))}
-                </select>
+                </Select>
                 {fieldErrors.categoryId && (
                   <p className="text-red-400 text-xs flex items-center gap-1">
                     <AlertTriangle className="h-3 w-3" />
@@ -1722,8 +1713,8 @@ export default function ProductsPage() {
                       onClick={() => setFormData({ ...formData, status })}
                       className={`p-3 rounded-lg border transition-all text-sm font-medium ${
                         formData.status === status
-                          ? "bg-white/[0.12] border-white/[0.3] text-white"
-                          : "bg-white/[0.04] border-white/[0.1] text-white/60 hover:bg-white/[0.06]"
+                          ? "neu-elevated text-foreground"
+                          : "neu-flat text-muted-foreground hover:neu-elevated"
                       }`}
                     >
                       {status === "draft" ? "Borrador" : status === "active" ? "Activo" : "Oculto"}
@@ -1741,7 +1732,7 @@ export default function ProductsPage() {
                   id="description"
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="min-h-[100px] bg-white/[0.04] backdrop-blur-xl border-white/[0.1] rounded-xl text-white placeholder:text-white/40 focus:border-white/[0.2] focus:bg-white/[0.06] transition-all resize-none"
+                  className="min-h-[100px] neu-pressed border-0-white/[0.1] rounded-xl text-white placeholder:text-white/40 focus:border-0 focus:neu-elevated transition-all resize-none"
                   placeholder="Describe el producto..."
                   rows={3}
                 />
@@ -1756,7 +1747,7 @@ export default function ProductsPage() {
                   id="slug"
                   value={formData.slug || generateSlug(formData.name)}
                   onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
-                  className="h-11 bg-white/[0.04] backdrop-blur-xl border-white/[0.1] rounded-xl text-white placeholder:text-white/40 focus:border-white/[0.2] focus:bg-white/[0.06] transition-all"
+                  className="h-11 neu-pressed border-0-white/[0.1] rounded-xl text-white placeholder:text-white/40 focus:border-0 focus:neu-elevated transition-all"
                   placeholder="Se genera automáticamente desde el nombre"
                 />
                 <p className="text-white/40 text-xs">URL amigable para SEO. Se genera automáticamente si se deja vacío.</p>
@@ -1774,13 +1765,13 @@ export default function ProductsPage() {
                       type="url"
                       value={formData.imageUrl}
                       onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-                      className="h-11 bg-white/[0.04] backdrop-blur-xl border-white/[0.1] rounded-xl text-white placeholder:text-white/40 focus:border-white/[0.2] focus:bg-white/[0.06] transition-all"
+                      className="h-11 neu-pressed border-0-white/[0.1] rounded-xl text-white placeholder:text-white/40 focus:border-0 focus:neu-elevated transition-all"
                       placeholder="https://ejemplo.com/imagen.jpg"
                     />
                     <Button
                       type="button"
                       variant="outline"
-                      className="h-11 bg-white/[0.04] hover:bg-white/[0.08] backdrop-blur-xl border-white/[0.1] text-white rounded-xl px-4 transition-all"
+                      className="h-11 neu-pressed neu-hover neu-active border-0 text-foreground rounded-xl px-4 transition-all"
                       asChild
                     >
                       <label className="flex items-center gap-2 cursor-pointer">
@@ -1806,13 +1797,13 @@ export default function ProductsPage() {
               </div>
 
               {/* Producto destacado */}
-              <div className="flex items-center gap-3 p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+              <div className="flex items-center gap-3 p-4 rounded-xl neu-pressed border-0">
                 <input
                   type="checkbox"
                   id="featured"
                   checked={formData.isFeatured}
                   onChange={(e) => setFormData({ ...formData, isFeatured: e.target.checked })}
-                  className="h-5 w-5 rounded-md border-white/[0.2] bg-white/[0.05] checked:bg-white checked:border-white cursor-pointer"
+                  className="h-5 w-5 rounded-md border-0 neu-pressed checked:bg-white checked:border-white cursor-pointer"
                 />
                 <Label
                   htmlFor="featured"
@@ -1833,7 +1824,7 @@ export default function ProductsPage() {
                     onClick={addVariant}
                     size="sm"
                     variant="ghost"
-                    className="h-8 bg-white/[0.06] hover:bg-white/[0.1] text-white/80 hover:text-white rounded-lg px-3 text-[12px] transition-all"
+                    className="h-8 neu-elevated hover:neu-elevated text-white/80 hover:text-white rounded-lg px-3 text-[12px] transition-all"
                   >
                     <Plus className="h-3.5 w-3.5 mr-1.5" />
                     Agregar variante
@@ -1843,18 +1834,18 @@ export default function ProductsPage() {
                 {formData.variants.length > 0 && (
                   <div className="space-y-3">
                     {formData.variants.map((variant, index) => (
-                      <div key={index} className="flex flex-col gap-2 rounded-xl border border-white/[0.08] bg-white/[0.02] p-3">
+                      <div key={index} className="flex flex-col gap-2 rounded-xl neu-flat border-0 neu-flat p-3">
                         <div className="grid grid-cols-2 gap-3">
                           <Input
                             value={variant.name}
                             onChange={(e) => updateVariant(index, "name", e.target.value)}
-                            className="h-10 bg-white/[0.04] backdrop-blur-xl border-white/[0.1] rounded-lg text-white placeholder:text-white/40 focus:border-white/[0.2] text-[13px]"
+                            className="h-10 neu-pressed border-0-white/[0.1] rounded-lg text-white placeholder:text-white/40 focus:border-0 text-[13px]"
                             placeholder="Nombre (ej: Color)"
                           />
                           <Input
                             value={variant.value}
                             onChange={(e) => updateVariant(index, "value", e.target.value)}
-                            className="h-10 bg-white/[0.04] backdrop-blur-xl border-white/[0.1] rounded-lg text-white placeholder:text-white/40 focus:border-white/[0.2] text-[13px]"
+                            className="h-10 neu-pressed border-0-white/[0.1] rounded-lg text-white placeholder:text-white/40 focus:border-0 text-[13px]"
                             placeholder="Valor (ej: Rojo)"
                           />
                         </div>
@@ -1871,7 +1862,7 @@ export default function ProductsPage() {
                                 e.target.value ? parseFloat(e.target.value) : undefined,
                               )
                             }
-                            className="h-10 bg-white/[0.04] backdrop-blur-xl border-white/[0.1] rounded-lg text-white placeholder:text-white/40 focus:border-white/[0.2] text-[13px]"
+                            className="h-10 neu-pressed border-0-white/[0.1] rounded-lg text-white placeholder:text-white/40 focus:border-0 text-[13px]"
                           />
                           <Input
                             type="number"
@@ -1884,7 +1875,7 @@ export default function ProductsPage() {
                                 e.target.value ? parseInt(e.target.value) : undefined,
                               )
                             }
-                            className="h-10 bg-white/[0.04] backdrop-blur-xl border-white/[0.1] rounded-lg text-white placeholder:text-white/40 focus:border-white/[0.2] text-[13px]"
+                            className="h-10 neu-pressed border-0-white/[0.1] rounded-lg text-white placeholder:text-white/40 focus:border-0 text-[13px]"
                           />
                         </div>
                         <div className="flex justify-end">
@@ -1893,7 +1884,7 @@ export default function ProductsPage() {
                             onClick={() => removeVariant(index)}
                             size="icon"
                             variant="ghost"
-                            className="h-9 w-9 rounded-lg hover:bg-white/[0.08] text-white/60 hover:text-white transition-all flex-shrink-0"
+                            className="h-9 w-9 rounded-lg neu-hover neu-active text-white/60 hover:text-white transition-all flex-shrink-0"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -1905,11 +1896,11 @@ export default function ProductsPage() {
               </div>
 
               {/* Actions */}
-              <div className="flex gap-3 pt-4 border-t border-white/[0.08]">
+              <div className="flex gap-3 pt-4 border-t-0 neu-pressed pt-4">
                 <Button
                   type="submit"
                   disabled={saving}
-                  className="flex-1 h-11 bg-white/[0.12] hover:bg-white/[0.16] backdrop-blur-md border border-white/[0.15] text-white shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-all duration-300 hover:shadow-[0_12px_40px_rgba(0,0,0,0.5)] rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 h-11 neu-elevated neu-hover neu-active text-foreground transition-all duration-300 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {saving ? (
                     <>
@@ -1927,7 +1918,7 @@ export default function ProductsPage() {
                   onClick={() => !saving && setLoadMode(null)}
                   disabled={saving}
                   variant="outline"
-                  className="flex-1 h-11 bg-white/[0.03] hover:bg-white/[0.06] backdrop-blur-md border-white/[0.1] text-white/80 hover:text-white rounded-xl font-medium transition-all disabled:opacity-50"
+                  className="flex-1 h-11 neu-flat neu-hover neu-active text-muted-foreground hover:text-foreground rounded-xl font-medium transition-all disabled:opacity-50"
                 >
                   Cancelar
                 </Button>
@@ -1941,11 +1932,11 @@ export default function ProductsPage() {
       {loadMode === "csv" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div
-            className="absolute inset-0 bg-black/80 backdrop-blur-md"
+            className="absolute inset-0 bg-background/90"
             onClick={() => !csvLoading && setLoadMode(null)}
           />
-          <div className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl bg-black/60 backdrop-blur-2xl border border-white/[0.12] shadow-[0_32px_80px_rgba(0,0,0,0.9)] animate-in zoom-in-95 duration-300">
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/[0.08] bg-black/40 backdrop-blur-xl p-6">
+          <div className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl neu-elevated animate-in zoom-in-95 duration-300">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b-0 neu-pressed p-6 rounded-t-2xl">
               <div>
                 <h2 className="font-serif text-[32px] font-semibold tracking-[-0.02em] text-white leading-tight">
                   Importación masiva (CSV)
@@ -1956,7 +1947,7 @@ export default function ProductsPage() {
                 onClick={() => !csvLoading && setLoadMode(null)}
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 rounded-xl hover:bg-white/[0.08] text-white/60 hover:text-white transition-all"
+                className="h-9 w-9 rounded-xl neu-flat neu-hover neu-active text-muted-foreground hover:text-foreground transition-all"
               >
                 <X className="h-5 w-5" />
               </Button>
@@ -1966,7 +1957,7 @@ export default function ProductsPage() {
               {/* Upload */}
               {!csvFile && (
                 <div className="space-y-4">
-                  <div className="border-2 border-dashed border-white/[0.2] rounded-xl p-12 text-center hover:border-white/[0.3] transition-colors">
+                  <div className="border-2 border-dashed border-0 rounded-xl p-12 text-center hover:border-0 transition-colors">
                     <FileSpreadsheet className="h-12 w-12 text-white/40 mx-auto mb-4" />
                     <Label htmlFor="csv-upload" className="cursor-pointer">
                       <div className="space-y-2">
@@ -1982,7 +1973,7 @@ export default function ProductsPage() {
                       />
                     </Label>
                   </div>
-                  <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4">
+                  <div className="neu-pressed border-0 rounded-xl p-4">
                     <p className="text-white/70 text-sm font-medium mb-2">Formato requerido del CSV:</p>
                     <p className="text-white/50 text-xs font-mono">
                       name,price,stock,category,description
@@ -2009,16 +2000,16 @@ export default function ProductsPage() {
                       }}
                       variant="outline"
                       size="sm"
-                      className="bg-white/[0.03] hover:bg-white/[0.06] border-white/[0.1] text-white/80 hover:text-white"
+                      className="neu-flat neu-hover neu-active border-0 text-muted-foreground hover:text-foreground"
                     >
                       Cambiar archivo
                     </Button>
                   </div>
 
-                  <div className="border border-white/[0.1] rounded-xl overflow-hidden">
+                  <div className="neu-flat border-0 rounded-xl overflow-hidden">
                     <div className="overflow-x-auto max-h-[400px]">
                       <table className="w-full text-sm">
-                        <thead className="bg-white/[0.05] sticky top-0">
+                        <thead className="neu-pressed sticky top-0">
                           <tr>
                             <th className="px-4 py-3 text-left text-white/70 font-medium">Nombre</th>
                             <th className="px-4 py-3 text-left text-white/70 font-medium">Precio</th>
@@ -2028,7 +2019,7 @@ export default function ProductsPage() {
                         </thead>
                         <tbody className="divide-y divide-white/[0.05]">
                           {csvPreview.slice(0, 10).map((row, index) => (
-                            <tr key={index} className="hover:bg-white/[0.02]">
+                            <tr key={index} className="hover:neu-flat">
                               <td className="px-4 py-3 text-white/80">{row.name}</td>
                               <td className="px-4 py-3 text-white/80">${row.price}</td>
                               <td className="px-4 py-3 text-white/80">{row.stock}</td>
@@ -2039,17 +2030,17 @@ export default function ProductsPage() {
                       </table>
                     </div>
                     {csvPreview.length > 10 && (
-                      <div className="px-4 py-3 bg-white/[0.03] text-center text-white/50 text-sm">
+                      <div className="px-4 py-3 neu-pressed text-center text-muted-foreground text-sm">
                         ... y {csvPreview.length - 10} productos más
                       </div>
                     )}
                   </div>
 
-                  <div className="flex gap-3 pt-4 border-t border-white/[0.08]">
+                  <div className="flex gap-3 pt-4 border-t-0 neu-pressed pt-4">
                     <Button
                       onClick={handleCSVImport}
                       disabled={csvLoading}
-                      className="flex-1 h-11 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 text-white/80 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      className="flex-1 h-11 neu-elevated neu-hover neu-active text-foreground rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                     >
                       {csvLoading ? (
                         <>
@@ -2071,7 +2062,7 @@ export default function ProductsPage() {
                       }}
                       disabled={csvLoading}
                       variant="outline"
-                      className="flex-1 h-11 bg-white/[0.03] hover:bg-white/[0.06] backdrop-blur-md border-white/[0.1] text-white/80 hover:text-white rounded-xl font-medium transition-all disabled:opacity-50"
+                      className="flex-1 h-11 neu-flat neu-hover neu-active text-muted-foreground hover:text-foreground rounded-xl font-medium transition-all disabled:opacity-50"
                     >
                       Cancelar
                     </Button>
@@ -2087,11 +2078,11 @@ export default function ProductsPage() {
       {stockAdjustmentModal.open && stockAdjustmentModal.product && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div
-            className="absolute inset-0 bg-black/80 backdrop-blur-md"
+            className="absolute inset-0 bg-background/90"
             onClick={closeStockAdjustment}
           />
-          <div className="relative w-full max-w-md rounded-2xl bg-black/60 backdrop-blur-2xl border border-white/[0.12] shadow-[0_32px_80px_rgba(0,0,0,0.9)] animate-in zoom-in-95 duration-300">
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/[0.08] bg-black/40 backdrop-blur-xl p-6">
+          <div className="relative w-full max-w-md rounded-2xl neu-elevated animate-in zoom-in-95 duration-300">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b-0 neu-pressed p-6 rounded-t-2xl">
               <h2 className="font-serif text-[28px] font-semibold tracking-[-0.02em] text-white leading-tight">
                 Ajustar Stock
               </h2>
@@ -2099,7 +2090,7 @@ export default function ProductsPage() {
                 onClick={closeStockAdjustment}
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 rounded-xl hover:bg-white/[0.08] text-white/60 hover:text-white transition-all"
+                className="h-9 w-9 rounded-xl neu-flat neu-hover neu-active text-muted-foreground hover:text-foreground transition-all"
               >
                 <X className="h-5 w-5" />
               </Button>
@@ -2133,7 +2124,7 @@ export default function ProductsPage() {
                       type="number"
                       value={stockAdjustment.quantity}
                       onChange={(e) => setStockAdjustment(prev => ({ ...prev, quantity: parseInt(e.target.value) || 0 }))}
-                      className="flex-1 h-10 bg-white/[0.04] backdrop-blur-xl border-white/[0.1] rounded-xl text-white text-center font-semibold"
+                      className="flex-1 h-10 neu-pressed border-0-white/[0.1] rounded-xl text-white text-center font-semibold"
                     />
                     <Button
                       type="button"
@@ -2159,19 +2150,19 @@ export default function ProductsPage() {
                   <Textarea
                     value={stockAdjustment.reason}
                     onChange={(e) => setStockAdjustment(prev => ({ ...prev, reason: e.target.value }))}
-                    className="min-h-[80px] bg-white/[0.04] backdrop-blur-xl border-white/[0.1] rounded-xl text-white placeholder:text-white/40 focus:border-white/[0.2] focus:bg-white/[0.06] transition-all resize-none"
+                    className="min-h-[80px] neu-pressed border-0-white/[0.1] rounded-xl text-white placeholder:text-white/40 focus:border-0 focus:neu-elevated transition-all resize-none"
                     placeholder="Ej: Reposición de inventario, Venta, Devolución..."
                     rows={3}
                   />
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-4 border-t border-white/[0.08]">
+              <div className="flex gap-3 pt-4 border-t-0 neu-pressed pt-4">
                 <Button
                   type="button"
                   onClick={handleStockAdjustment}
                   disabled={adjustingStock || stockAdjustment.quantity === 0}
-                  className="flex-1 h-11 bg-white/[0.12] hover:bg-white/[0.16] backdrop-blur-md border border-white/[0.15] text-white shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-all duration-300 hover:shadow-[0_12px_40px_rgba(0,0,0,0.5)] rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 h-11 neu-elevated neu-hover neu-active text-foreground transition-all duration-300 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {adjustingStock ? (
                     <>
@@ -2187,7 +2178,7 @@ export default function ProductsPage() {
                   onClick={closeStockAdjustment}
                   disabled={adjustingStock}
                   variant="outline"
-                  className="flex-1 h-11 bg-white/[0.03] hover:bg-white/[0.06] backdrop-blur-md border-white/[0.1] text-white/80 hover:text-white rounded-xl font-medium transition-all disabled:opacity-50"
+                  className="flex-1 h-11 neu-flat neu-hover neu-active text-muted-foreground hover:text-foreground rounded-xl font-medium transition-all disabled:opacity-50"
                 >
                   Cancelar
                 </Button>
@@ -2201,11 +2192,11 @@ export default function ProductsPage() {
       {stockHistoryModal.open && stockHistoryModal.product && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div
-            className="absolute inset-0 bg-black/80 backdrop-blur-md"
+            className="absolute inset-0 bg-background/90"
             onClick={closeStockHistory}
           />
-          <div className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-black/60 backdrop-blur-2xl border border-white/[0.12] shadow-[0_32px_80px_rgba(0,0,0,0.9)] animate-in zoom-in-95 duration-300">
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/[0.08] bg-black/40 backdrop-blur-xl p-6">
+          <div className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl neu-elevated animate-in zoom-in-95 duration-300">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b-0 neu-pressed p-6 rounded-t-2xl">
               <div>
                 <h2 className="font-serif text-[28px] font-semibold tracking-[-0.02em] text-white leading-tight">
                   Historial de Stock
@@ -2216,7 +2207,7 @@ export default function ProductsPage() {
                 onClick={closeStockHistory}
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 rounded-xl hover:bg-white/[0.08] text-white/60 hover:text-white transition-all"
+                className="h-9 w-9 rounded-xl neu-flat neu-hover neu-active text-muted-foreground hover:text-foreground transition-all"
               >
                 <X className="h-5 w-5" />
               </Button>
@@ -2229,7 +2220,7 @@ export default function ProductsPage() {
                   <p className="text-sm">Cargando historial...</p>
                 </div>
               ) : stockHistory.length === 0 ? (
-                <div className="p-8 text-center text-white/60 bg-white/[0.03] border border-white/[0.06] rounded-2xl backdrop-blur-xl">
+                <div className="p-8 text-center text-muted-foreground neu-pressed rounded-2xl">
                   No hay movimientos de stock registrados.
                 </div>
               ) : (
@@ -2237,7 +2228,7 @@ export default function ProductsPage() {
                   {stockHistory.map((movement: any, index: number) => (
                     <div
                       key={index}
-                      className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.06] backdrop-blur-xl"
+                      className="p-4 rounded-xl neu-pressed"
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">

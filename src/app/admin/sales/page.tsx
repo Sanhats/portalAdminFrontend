@@ -6,8 +6,10 @@ import { Plus, Search, Eye, CheckCircle2, XCircle, Clock, DollarSign, Filter } f
 import { api } from "@/lib/api-client";
 import Notification from "@/components/Notification";
 import { DashboardLayout } from "@/components/dashboard-layout";
+import LoadingSpinner from "@/components/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 
 type SaleStatus = 'draft' | 'confirmed' | 'cancelled' | 'paid';
 
@@ -193,12 +195,12 @@ export default function SalesPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-white">Ventas</h1>
-            <p className="text-white/60 mt-1">Gestiona las ventas del sistema</p>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">Ventas</h1>
+            <p className="text-muted-foreground mt-1">Gestiona las ventas del sistema</p>
           </div>
           <Button
             onClick={() => router.push('/admin/sales/new')}
-            className="bg-white/10 hover:bg-white/20 text-white border border-white/20"
+            className="neu-button text-foreground"
           >
             <Plus className="h-4 w-4 mr-2" />
             Nueva Venta
@@ -208,60 +210,60 @@ export default function SalesPage() {
         {/* Filtros */}
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-white/60" />
-            <select
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <Select
               value={statusFilter}
               onChange={(e) => {
                 setStatusFilter(e.target.value as SaleStatus | '');
                 setPage(1);
               }}
-              className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white/80 text-sm focus:outline-none focus:ring-2 focus:ring-white/20"
+              className="w-48"
             >
               <option value="">Todos los estados</option>
               <option value="draft">Borrador</option>
               <option value="confirmed">Confirmada</option>
               <option value="paid">Pagada</option>
               <option value="cancelled">Cancelada</option>
-            </select>
+            </Select>
           </div>
-          <div className="text-white/60 text-sm">
+          <div className="text-muted-foreground text-sm">
             Total: {total} ventas
           </div>
         </div>
 
         {/* Tabla de ventas */}
-        <div className="overflow-hidden rounded-2xl bg-white/[0.03] backdrop-blur-2xl border border-white/[0.06] shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
+        <div className="overflow-hidden rounded-2xl neu-elevated border-0">
           {loading ? (
-            <div className="p-8 text-center text-white/60">Cargando ventas...</div>
+            <LoadingSpinner />
           ) : sales.length === 0 ? (
-            <div className="p-8 text-center text-white/60">No hay ventas para mostrar</div>
+            <div className="p-8 text-center text-muted-foreground neu-pressed rounded-2xl">No hay ventas para mostrar</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-white/[0.08] bg-white/[0.03]">
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-white/60">ID</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-white/60">Fecha</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-white/60">Total</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-white/60">Estado</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-white/60">Método de Pago</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-white/60">Cantidad</th>
-                    <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wide text-white/60">Acciones</th>
+                  <tr className="neu-pressed border-0">
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">ID</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fecha</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Total</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Estado</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Método de Pago</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cantidad</th>
+                    <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
                   {sales.map((sale) => (
                     <tr
                       key={sale.id}
-                      className="border-b border-white/[0.06] transition-all duration-200 hover:bg-white/[0.04]"
+                      className="neu-flat neu-hover transition-all duration-200 border-0"
                     >
-                      <td className="px-6 py-4 text-sm text-white/80 font-mono">
+                      <td className="px-6 py-4 text-sm text-foreground font-mono">
                         {sale.id.slice(0, 8)}...
                       </td>
-                      <td className="px-6 py-4 text-sm text-white/80">
+                      <td className="px-6 py-4 text-sm text-foreground">
                         {formatDate(sale.created_at)}
                       </td>
-                      <td className="px-6 py-4 text-sm text-white font-semibold">
+                      <td className="px-6 py-4 text-sm text-foreground font-semibold">
                         {formatCurrency(sale.total_amount)}
                       </td>
                       <td className="px-6 py-4">
@@ -270,13 +272,13 @@ export default function SalesPage() {
                           {getStatusLabel(sale.status)}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-sm text-white/70">
+                      <td className="px-6 py-4 text-sm text-muted-foreground">
                         {getPaymentMethodLabel(sale.payment_method)}
                       </td>
-                      <td className="px-6 py-4 text-sm text-white/70">
+                      <td className="px-6 py-4 text-sm text-muted-foreground">
                         {sale.sale_items?.reduce((sum, item) => sum + item.quantity, 0) || 0} unidades
                         {sale.sale_items && sale.sale_items.length > 0 && (
-                          <span className="text-white/50 text-xs block mt-0.5">
+                          <span className="text-muted-foreground text-xs block mt-0.5">
                             ({sale.sale_items.length} {sale.sale_items.length === 1 ? 'producto' : 'productos'})
                           </span>
                         )}
@@ -286,7 +288,7 @@ export default function SalesPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => router.push(`/admin/sales/${sale.id}`)}
-                          className="text-white/60 hover:text-white hover:bg-white/10"
+                          className="text-muted-foreground hover:text-foreground"
                         >
                           <Eye className="h-4 w-4 mr-1" />
                           Ver
@@ -303,7 +305,7 @@ export default function SalesPage() {
         {/* Paginación */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between">
-            <div className="text-sm text-white/60">
+            <div className="text-sm text-muted-foreground">
               Página {page} de {totalPages}
             </div>
             <div className="flex gap-2">
@@ -311,7 +313,7 @@ export default function SalesPage() {
                 variant="ghost"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="text-white/60 hover:text-white hover:bg-white/10 disabled:opacity-50"
+                className="text-muted-foreground hover:text-foreground disabled:opacity-50"
               >
                 Anterior
               </Button>
@@ -319,7 +321,7 @@ export default function SalesPage() {
                 variant="ghost"
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
-                className="text-white/60 hover:text-white hover:bg-white/10 disabled:opacity-50"
+                className="text-muted-foreground hover:text-foreground disabled:opacity-50"
               >
                 Siguiente
               </Button>

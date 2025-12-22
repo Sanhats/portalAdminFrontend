@@ -29,39 +29,37 @@ export function Sidebar() {
   const pathname = usePathname()
 
   return (
-    <aside className="hidden md:block fixed left-0 top-0 z-40 h-screen w-20 border-r border-white/[0.08] bg-white/[0.04] backdrop-blur-xl shadow-[0_8px_48px_rgba(0,0,0,0.9)]">
-      <div className="flex h-full flex-col items-center py-10">
-        <nav className="flex flex-1 flex-col items-center gap-4 justify-center">
+    <aside className="hidden md:block fixed left-0 top-0 z-40 h-screen w-20 neu-elevated">
+      <div className="flex h-full flex-col items-center py-6">
+        <nav className="flex flex-1 flex-col items-center gap-3 justify-center w-full px-2">
           {navigation.map((item) => {
             const isActive = pathname === item.href
             const linkClasses = isActive
-              ? "bg-white/[0.12] backdrop-blur-md shadow-[inset_0_2px_8px_rgba(0,0,0,0.3),0_4px_20px_rgba(255,255,255,0.08)] border border-white/[0.15]"
-              : "hover:bg-white/[0.08] hover:backdrop-blur-md hover:shadow-[0_4px_16px_rgba(0,0,0,0.4)] hover:border hover:border-white/[0.08]"
+              ? "neu-pressed"
+              : "neu-flat neu-hover neu-active"
             const iconClasses = isActive
-              ? "text-white drop-shadow-[0_2px_10px_rgba(255,255,255,0.4)]"
-              : "text-white/50 group-hover:text-white/80"
+              ? "text-primary drop-shadow-[0_2px_8px_rgba(0,0,0,0.3)]"
+              : "text-muted-foreground group-hover:text-foreground"
             return (
               <Link
                 key={item.name}
                 href={item.href}
-                className={`group relative flex h-11 w-11 items-center justify-center rounded-[13px] transition-all duration-300 ${linkClasses}`}
+                className={`group relative flex h-12 w-12 items-center justify-center rounded-[var(--radius)] transition-all duration-300 ${linkClasses}`}
               >
                 <item.icon
                   className={`h-[22px] w-[22px] transition-all duration-300 ${iconClasses}`}
                 />
                 {isActive && (
-                  <div className="absolute -left-0.5 h-5 w-[3px] rounded-full bg-white shadow-[0_0_16px_rgba(255,255,255,0.8)]" />
+                  <div className="absolute -left-1 h-6 w-1 rounded-full bg-primary shadow-[0_0_12px_rgba(0,0,0,0.6)]" />
                 )}
 
-                <div className="pointer-events-none absolute left-full ml-4 whitespace-nowrap rounded-xl bg-black/90 backdrop-blur-xl border border-white/[0.12] px-3.5 py-2 text-[13px] font-medium tracking-[-0.01em] text-white/95 opacity-0 shadow-[0_8px_32px_rgba(0,0,0,0.9)] transition-opacity group-hover:opacity-100">
+                <div className="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-[var(--radius)] neu-elevated px-3.5 py-2 text-[13px] font-medium tracking-[-0.01em] text-foreground opacity-0 transition-opacity group-hover:opacity-100 z-50">
                   {item.name}
                 </div>
               </Link>
             )
           })}
         </nav>
-
-        {/* Sin avatar ni acciones adicionales al final por ahora */}
       </div>
     </aside>
   )

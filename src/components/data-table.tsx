@@ -35,12 +35,12 @@ export function DataTable<T extends { id: string | number }>({
   onDelete,
 }: DataTableProps<T>) {
   return (
-    <div className="overflow-hidden rounded-2xl bg-white/[0.03] backdrop-blur-2xl border border-white/[0.06] shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
+    <div className="overflow-hidden rounded-2xl neu-table border-0">
       <Table>
         <TableHeader>
-          <TableRow className="border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.05] transition-colors">
+          <TableRow className="neu-flat neu-hover transition-colors">
             {columns.map((column) => (
-              <TableHead key={column.key} className="font-semibold text-[12px] uppercase tracking-wide text-white/60">
+                <TableHead key={column.key} className="font-semibold text-[12px] uppercase tracking-wide text-muted-foreground">
                 {column.label}
               </TableHead>
             ))}
@@ -51,10 +51,10 @@ export function DataTable<T extends { id: string | number }>({
           {data.map((item) => (
             <TableRow
               key={item.id}
-              className="border-white/[0.06] transition-all duration-200 hover:bg-white/[0.04] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+              className="neu-table-row transition-all duration-150 border-0"
             >
               {columns.map((column) => (
-                <TableCell key={column.key} className="text-white/80 text-[14px] font-normal tracking-[-0.01em]">
+                <TableCell key={column.key} className="text-foreground text-[14px] font-normal tracking-[-0.01em]">
                   {column.render ? column.render(item) : String(item[column.key as keyof T])}
                 </TableCell>
               ))}
@@ -64,23 +64,23 @@ export function DataTable<T extends { id: string | number }>({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8 rounded-lg hover:bg-white/[0.08] hover:backdrop-blur-md text-white/50 hover:text-white/90 transition-all"
+                      className="h-8 w-8 rounded-lg neu-flat neu-hover neu-active text-muted-foreground hover:text-foreground transition-all"
                     >
                       <MoreHorizontal className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent
                     align="end"
-                    className="border-white/[0.12] bg-black/90 backdrop-blur-xl text-white shadow-[0_8px_32px_rgba(0,0,0,0.9)] rounded-xl"
+                    className="neu-elevated border-0 text-foreground rounded-xl"
                   >
-                    <DropdownMenuLabel className="text-white/60 text-[11px] uppercase tracking-wide font-semibold">
+                    <DropdownMenuLabel className="text-muted-foreground text-[11px] uppercase tracking-wide font-semibold">
                       Actions
                     </DropdownMenuLabel>
-                    <DropdownMenuSeparator className="bg-white/[0.08]" />
+                    <DropdownMenuSeparator className="neu-pressed" />
                     {onView && (
                       <DropdownMenuItem
                         onClick={() => onView(item)}
-                        className="text-white/80 text-[13px] focus:bg-white/[0.08] focus:text-white/95 rounded-lg"
+                        className="text-foreground text-[13px] focus:neu-elevated rounded-lg"
                       >
                         <Eye className="mr-2 h-4 w-4" />
                         View
@@ -89,7 +89,7 @@ export function DataTable<T extends { id: string | number }>({
                     {onEdit && (
                       <DropdownMenuItem
                         onClick={() => onEdit(item)}
-                        className="text-white/80 text-[13px] focus:bg-white/[0.08] focus:text-white/95 rounded-lg"
+                        className="text-foreground text-[13px] focus:neu-elevated rounded-lg"
                       >
                         <Pencil className="mr-2 h-4 w-4" />
                         Edit
@@ -98,7 +98,7 @@ export function DataTable<T extends { id: string | number }>({
                     {onDelete && (
                       <DropdownMenuItem
                         onClick={() => onDelete(item)}
-                        className="text-white/80 text-[13px] focus:bg-white/[0.08] focus:text-white/95 rounded-lg"
+                        className="text-foreground text-[13px] focus:neu-elevated rounded-lg"
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
                         Delete

@@ -1,23 +1,28 @@
 import type { ReactNode } from "react"
+import { cn } from "@/lib/utils"
 
-interface GlassCardProps {
+interface NeumorphicCardProps {
   children: ReactNode
   className?: string
   hover?: boolean
+  variant?: "elevated" | "pressed" | "flat"
 }
 
-export function GlassCard({ children, className, hover = true }: GlassCardProps) {
-  const base =
-    "rounded-2xl p-6 bg-white/[0.03] backdrop-blur-2xl border border-white/[0.06] shadow-[0_20px_60px_rgba(0,0,0,0.5)] transition-all duration-300"
-  const hoverClass = hover
-    ? "hover:bg-white/[0.06] hover:border-white/[0.12] hover:shadow-[0_12px_48px_rgba(0,0,0,0.6)]"
-    : ""
-  const extra = className ? className : ""
+export function GlassCard({ children, className, hover = true, variant = "elevated" }: NeumorphicCardProps) {
+  const baseVariants = {
+    elevated: "neu-elevated",
+    pressed: "neu-pressed",
+    flat: "neu-flat"
+  }
+
+  const base = cn(
+    "p-6 transition-all duration-300",
+    baseVariants[variant],
+    hover && "neu-hover neu-active"
+  )
 
   return (
-    <div
-      className={`${base} ${hoverClass} ${extra}`.trim()}
-    >
+    <div className={cn(base, className)}>
       {children}
     </div>
   )
