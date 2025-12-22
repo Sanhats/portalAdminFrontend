@@ -9,6 +9,7 @@ import {
   FileIcon,
   HomeIcon,
 } from "./icons/custom-icons"
+import { ShoppingBag } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -17,6 +18,7 @@ const navigation = [
   { name: "Dashboard", href: "/admin", icon: DashboardIcon },
   { name: "Productos", href: "/admin/products", icon: PackageIcon },
   { name: "Categorías", href: "/admin/categories", icon: GridIcon },
+  { name: "Ventas", href: "/admin/sales", icon: ShoppingBag },
   // Rutas futuras del panel admin:
   // { name: "Pedidos", href: "/admin/orders", icon: CartIcon },
   // { name: "Clientes", href: "/admin/customers", icon: UsersIcon },

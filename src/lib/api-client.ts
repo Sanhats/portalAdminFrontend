@@ -271,6 +271,74 @@ class ApiClient {
 
     return response.json();
   }
+
+  // Sales
+  async getSales(params?: {
+    page?: number;
+    limit?: number;
+    status?: 'draft' | 'confirmed' | 'cancelled' | 'paid';
+    tenantId?: string;
+  }) {
+    const query = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          query.append(key, value.toString());
+        }
+      });
+    }
+    const url = `/sales?${query.toString()}`;
+    return this.request(url);
+  }
+
+  async getSale(id: string) {
+    return this.request(`/sales/${id}`);
+  }
+
+  async createSale(sale: {
+    tenantId?: string;
+    items: Array<{
+      productId: string;
+      variantId?: string | null;
+      quantity: number;
+      unitPrice: number | string;
+    }>;
+    paymentMethod?: 'cash' | 'transfer' | 'mercadopago' | 'other';
+    notes?: string;
+  }) {
+    return this.request("/sales", {
+      method: "POST",
+      body: JSON.stringify(sale),
+    });
+  }
+
+  async updateSale(id: string, updates: {
+    items?: Array<{
+      productId: string;
+      variantId?: string | null;
+      quantity: number;
+      unitPrice: number | string;
+    }>;
+    paymentMethod?: 'cash' | 'transfer' | 'mercadopago' | 'other';
+    notes?: string;
+  }) {
+    return this.request(`/sales/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(updates),
+    });
+  }
+
+  async confirmSale(id: string) {
+    return this.request(`/sales/${id}/confirm`, {
+      method: "POST",
+    });
+  }
+
+  async cancelSale(id: string) {
+    return this.request(`/sales/${id}/cancel`, {
+      method: "POST",
+    });
+  }
 }
 
 export const api = new ApiClient(process.env.NEXT_PUBLIC_API_URL!);
