@@ -16,6 +16,7 @@ import { PaymentQRModal } from "@/components/PaymentQRModal";
 import { PaymentMercadoPagoModal } from "@/components/PaymentMercadoPagoModal";
 import { PaymentTimeline } from "@/components/PaymentTimeline";
 import { PaymentQRDisplay } from "@/components/PaymentQRDisplay";
+import { PaymentConfirmModal } from "@/components/PaymentConfirmModal";
 import { Sale, Payment, SaleStatus, PaymentStatus } from "@/types/payments";
 import { canPaySale, canDeletePayment, canConfirmPayment } from "@/lib/payment-helpers";
 import { 
@@ -91,6 +92,8 @@ export default function SaleDetailPage() {
   const [showMPPaymentDialog, setShowMPPaymentDialog] = useState(false);
   const [confirmingPaymentId, setConfirmingPaymentId] = useState<string | null>(null);
   const [showTimeline, setShowTimeline] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [paymentToConfirm, setPaymentToConfirm] = useState<Payment | null>(null);
 
   const loadSale = async () => {
     if (!saleId) return;
@@ -277,7 +280,7 @@ export default function SaleDetailPage() {
     }
   };
 
-  const handleConfirmPayment = async (paymentId: string) => {
+  const handleConfirmPayment = (paymentId: string) => {
     const payment = payments.find(p => p.id === paymentId);
     if (!payment || !canConfirmPayment(payment)) {
       setNotification({
@@ -287,28 +290,42 @@ export default function SaleDetailPage() {
       return;
     }
 
-    if (!confirm("¿Confirmar este pago? Esta acción no se puede deshacer.")) {
-      return;
+    // Abrir modal de confirmación
+    setPaymentToConfirm(payment);
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirmPaymentSuccess = async () => {
+    // Cerrar modal
+    setShowConfirmModal(false);
+    
+    // Actualización optimista: actualizar el estado visual inmediatamente
+    if (paymentToConfirm) {
+      const updatedPayments = payments.map((p) =>
+        p.id === paymentToConfirm.id
+          ? {
+              ...p,
+              status: "confirmed" as const,
+              confirmed_at: new Date().toISOString(),
+              confirmed_by: "current-user", // Se actualizará con el valor real al recargar
+            }
+          : p
+      );
+      setPayments(updatedPayments);
     }
 
-    setConfirmingPaymentId(paymentId);
-    try {
-      await api.confirmPayment(paymentId);
-      await loadPayments();
-      await loadSale();
-      setNotification({
-        message: "Pago confirmado exitosamente",
-        type: "success",
-      });
-    } catch (error: any) {
-      console.error("Error al confirmar pago:", error);
-      setNotification({
-        message: getErrorMessage(error),
-        type: "error",
-      });
-    } finally {
-      setConfirmingPaymentId(null);
-    }
+    // Mostrar toast de éxito con mejor feedback
+    setNotification({
+      message: `✅ Pago de ${paymentToConfirm ? formatCurrency(paymentToConfirm.amount) : ""} confirmado exitosamente`,
+      type: "success",
+    });
+
+    // Recargar datos en segundo plano para sincronizar con el backend
+    loadPayments().catch(console.error);
+    loadSale().catch(console.error);
+
+    // Limpiar estado
+    setPaymentToConfirm(null);
   };
 
   const formatDate = (dateString: string) => {
@@ -592,7 +609,11 @@ export default function SaleDetailPage() {
                 {payments.map((payment) => (
                   <div
                     key={payment.id}
-                    className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/10"
+                    className={`flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/10 transition-all duration-300 ${
+                      payment.status === "confirmed" && payment.confirmed_at
+                        ? "ring-2 ring-green-500/30"
+                        : ""
+                    }`}
                   >
                     <div className="flex-1">
                       {/* Estado, Método y Monto - Información principal */}
@@ -678,17 +699,10 @@ export default function SaleDetailPage() {
                             variant="ghost"
                             size="sm"
                             onClick={() => handleConfirmPayment(payment.id)}
-                            disabled={confirmingPaymentId === payment.id}
-                            className="text-green-400 hover:text-green-300 hover:bg-green-500/10 disabled:opacity-50"
+                            className="text-green-400 hover:text-green-300 hover:bg-green-500/10"
                           >
-                            {confirmingPaymentId === payment.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <>
-                                <CheckCircle2 className="h-4 w-4 mr-1" />
-                                Confirmar
-                              </>
-                            )}
+                            <CheckCircle2 className="h-4 w-4 mr-1" />
+                            Confirmar
                           </Button>
                         )}
                         {canDeletePayment(payment) && (
@@ -896,6 +910,17 @@ export default function SaleDetailPage() {
             onClose={() => setNotification(null)}
           />
         )}
+
+        {/* Modal de Confirmación de Pago */}
+        <PaymentConfirmModal
+          isOpen={showConfirmModal}
+          onClose={() => {
+            setShowConfirmModal(false);
+            setPaymentToConfirm(null);
+          }}
+          payment={paymentToConfirm}
+          onSuccess={handleConfirmPaymentSuccess}
+        />
       </div>
     </DashboardLayout>
   );
