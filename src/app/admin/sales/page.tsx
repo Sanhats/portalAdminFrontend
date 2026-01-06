@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Search, Eye, CheckCircle2, XCircle, Clock, DollarSign, Filter } from "lucide-react";
+import { Plus, Search, Eye, CheckCircle2, XCircle, Clock, DollarSign, Filter, Zap } from "lucide-react";
 import { api } from "@/lib/api-client";
 import Notification from "@/components/Notification";
 import { DashboardLayout } from "@/components/dashboard-layout";
@@ -198,13 +198,22 @@ export default function SalesPage() {
             <h1 className="text-3xl font-bold tracking-tight text-foreground">Ventas</h1>
             <p className="text-muted-foreground mt-1">Gestiona las ventas del sistema</p>
           </div>
-          <Button
-            onClick={() => router.push('/admin/sales/new')}
-            className="neu-button text-foreground"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Nueva Venta
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => router.push('/admin/payments/quick')}
+              className="neu-button bg-green-600 hover:bg-green-700 text-white border-0"
+            >
+              <Zap className="h-4 w-4 mr-2" />
+              Cobro Rápido
+            </Button>
+            <Button
+              onClick={() => router.push('/admin/sales/new')}
+              className="neu-button text-foreground"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Nueva Venta
+            </Button>
+          </div>
         </div>
 
         {/* Filtros */}

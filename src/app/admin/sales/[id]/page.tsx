@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, XCircle, AlertTriangle, Loader2, Edit, Save, X, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle, AlertTriangle, Loader2, Edit, Save, X, Plus, Trash2, Zap, FileImage, Eye, DollarSign } from "lucide-react";
 import { api } from "@/lib/api-client";
 import Notification from "@/components/Notification";
 import { DashboardLayout } from "@/components/dashboard-layout";
@@ -12,8 +12,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { SaleFinancialCard } from "@/components/SaleFinancialCard";
 import { PaymentModal } from "@/components/PaymentModal";
-import { PaymentQRModal } from "@/components/PaymentQRModal";
-import { PaymentMercadoPagoModal } from "@/components/PaymentMercadoPagoModal";
 import { PaymentTimeline } from "@/components/PaymentTimeline";
 import { PaymentQRDisplay } from "@/components/PaymentQRDisplay";
 import { PaymentConfirmModal } from "@/components/PaymentConfirmModal";
@@ -88,8 +86,6 @@ export default function SaleDetailPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loadingPayments, setLoadingPayments] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
-  const [showQRPaymentDialog, setShowQRPaymentDialog] = useState(false);
-  const [showMPPaymentDialog, setShowMPPaymentDialog] = useState(false);
   const [confirmingPaymentId, setConfirmingPaymentId] = useState<string | null>(null);
   const [showTimeline, setShowTimeline] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -563,30 +559,14 @@ export default function SaleDetailPage() {
                 )}
               </div>
               {sale.status === 'confirmed' && !sale.financial?.isPaid && (
-                <div className="flex gap-2">
-                  <Button
-                    onClick={() => setShowMPPaymentDialog(true)}
-                    size="sm"
-                    className="bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/30"
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Mercado Pago
-                  </Button>
-                  <Button
-                    onClick={() => setShowQRPaymentDialog(true)}
-                    size="sm"
-                    className="bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 border border-yellow-500/30"
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Pago QR
-                  </Button>
+                <div className="flex gap-3 flex-wrap">
                   <Button
                     onClick={() => setShowPaymentDialog(true)}
-                    size="sm"
-                    className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30"
+                    size="lg"
+                    className="bg-green-600 hover:bg-green-700 active:bg-green-800 text-white border-0 font-bold text-base px-6 py-3 shadow-lg shadow-green-600/30"
                   >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Pago Manual
+                    <DollarSign className="h-5 w-5 mr-2" />
+                    Cobrar
                   </Button>
                 </div>
               )}
@@ -638,11 +618,22 @@ export default function SaleDetailPage() {
                       </div>
                       
                       {/* Información adicional */}
-                      {payment.reference && (
-                        <div className="text-white/60 text-sm mt-1">
-                          Referencia: {payment.reference}
-                        </div>
-                      )}
+                      <div className="flex items-center gap-2 flex-wrap mt-1">
+                        {payment.reference && (
+                          <div className="text-white/60 text-sm">
+                            Referencia: {payment.reference}
+                          </div>
+                        )}
+                        {/* Icono de evidencia/comprobante - SPRINT 4 */}
+                        {(payment.metadata?.comprobante_url || 
+                          (payment.metadata as any)?.proofFileUrl || 
+                          (payment as any).comprobante_url) && (
+                          <div className="flex items-center gap-1 text-blue-400 text-sm">
+                            <FileImage className="h-4 w-4" />
+                            <span className="text-xs">Comprobante adjunto</span>
+                          </div>
+                        )}
+                      </div>
                       {payment.confirmed_at && (
                         <div className="text-white/50 text-xs mt-1">
                           Confirmado: {formatDate(payment.confirmed_at)}
@@ -693,6 +684,27 @@ export default function SaleDetailPage() {
                         {formatCurrency(payment.amount)}
                       </span>
                       <div className="flex gap-2">
+                        {/* Ver comprobante si existe - SPRINT 4 */}
+                        {(payment.metadata?.comprobante_url || 
+                          (payment.metadata as any)?.proofFileUrl || 
+                          (payment as any).comprobante_url) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const proofUrl = payment.metadata?.comprobante_url || 
+                                             (payment.metadata as any)?.proofFileUrl || 
+                                             (payment as any).comprobante_url;
+                              if (proofUrl) {
+                                window.open(proofUrl, '_blank');
+                              }
+                            }}
+                            className="text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
+                            title="Ver comprobante"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        )}
                         {/* Acción: Confirmar pago */}
                         {canConfirmPayment(payment) && (
                           <Button
@@ -822,7 +834,7 @@ export default function SaleDetailPage() {
           </div>
         )}
 
-        {/* Modal de pago manual */}
+        {/* Modal de pago - Solo efectivo y transferencia */}
         {showPaymentDialog && sale.financial && (
           <PaymentModal
             isOpen={showPaymentDialog}
@@ -830,29 +842,7 @@ export default function SaleDetailPage() {
             saleId={sale.id}
             balanceAmount={sale.financial.balanceAmount}
             onSuccess={handlePaymentSuccess}
-            filterManualOnly={true} // Sprint FE-2: Solo métodos manuales
-          />
-        )}
-
-        {/* Modal de pago QR */}
-        {showQRPaymentDialog && sale.financial && (
-          <PaymentQRModal
-            isOpen={showQRPaymentDialog}
-            onClose={() => setShowQRPaymentDialog(false)}
-            saleId={sale.id}
-            balanceAmount={sale.financial.balanceAmount}
-            onSuccess={handlePaymentSuccess}
-          />
-        )}
-
-        {/* Modal de pago Mercado Pago */}
-        {showMPPaymentDialog && sale.financial && (
-          <PaymentMercadoPagoModal
-            isOpen={showMPPaymentDialog}
-            onClose={() => setShowMPPaymentDialog(false)}
-            saleId={sale.id}
-            balanceAmount={sale.financial.balanceAmount}
-            onSuccess={handlePaymentSuccess}
+            filterManualOnly={true} // Solo métodos manuales (efectivo y transferencia)
           />
         )}
 

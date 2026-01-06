@@ -23,6 +23,13 @@ export async function PUT(
   return handleRequest(request, params.path, "PUT");
 }
 
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { path: string[] } }
+) {
+  return handleRequest(request, params.path, "PATCH");
+}
+
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { path: string[] } }
@@ -78,13 +85,25 @@ async function makeRequest(
   targetUrl: string,
   method: string
 ) {
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  };
+  const headers: HeadersInit = {};
 
-  const authHeader = request.headers.get("authorization");
+  // Intentar obtener el header de autorización con diferentes variaciones
+  const authHeader = 
+    request.headers.get("authorization") || 
+    request.headers.get("Authorization") ||
+    request.headers.get("AUTHORIZATION");
+  
   if (authHeader) {
     headers["Authorization"] = authHeader;
+  }
+
+  const contentType = request.headers.get("content-type");
+  const isFormData = contentType?.includes("multipart/form-data");
+
+  // Solo establecer Content-Type si NO es FormData
+  // El navegador establece automáticamente el Content-Type con boundary para FormData
+  if (!isFormData) {
+    headers["Content-Type"] = "application/json";
   }
 
   const options: RequestInit = {
@@ -93,9 +112,15 @@ async function makeRequest(
   };
 
   if (method !== "GET" && method !== "DELETE") {
-    const body = await request.text();
-    if (body) {
-      options.body = body;
+    // Si es FormData, usar formData() en lugar de text()
+    if (isFormData) {
+      const formData = await request.formData();
+      options.body = formData;
+    } else {
+      const body = await request.text();
+      if (body) {
+        options.body = body;
+      }
     }
   }
 
@@ -130,7 +155,7 @@ async function makeRequest(
         // El backend ya incluye headers CORS, pero los mantenemos por seguridad
         headers: {
           'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         }
       });

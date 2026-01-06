@@ -13,6 +13,7 @@ class ApiClient {
     return localStorage.getItem("access_token");
   }
 
+
   private getProxyUrl(endpoint: string): string {
     // Remover el / inicial del endpoint
     const cleanEndpoint = endpoint.startsWith("/") ? endpoint.slice(1) : endpoint;
@@ -95,6 +96,12 @@ class ApiClient {
 
       if (response.status === 400) {
         // Error de validación - el backend ahora incluye detalles útiles
+        throw error;
+      }
+
+      if (response.status === 403) {
+        // Error de permisos - sugerir verificar sesión
+        // El backend ya incluye mensajes descriptivos sobre qué roles se requieren
         throw error;
       }
 
@@ -279,6 +286,58 @@ class ApiClient {
     }
 
     return response.json();
+  }
+
+  // SPRINT 4: Upload de evidencia de pago
+  async uploadPaymentEvidence(file: File, paymentId?: string) {
+    const formData = new FormData();
+    formData.append("file", file);
+    if (paymentId) {
+      formData.append("paymentId", paymentId);
+    }
+    const token = this.getToken();
+
+    if (!token) {
+      throw new Error("No hay token de autenticación");
+    }
+
+    // Usar proxy para upload también
+    const url = this.useProxy 
+      ? this.getProxyUrl("/payments/evidence")
+      : `${this.baseUrl}/payments/evidence`;
+
+    // IMPORTANTE: NO establecer Content-Type manualmente cuando usas FormData
+    // El navegador lo establece automáticamente con el boundary correcto
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        // NO incluir Content-Type aquí - el navegador lo hace automáticamente
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      let errorData: any;
+      try {
+        errorData = await response.json();
+      } catch {
+        errorData = { error: "Error al subir evidencia" };
+      }
+
+      const errorMessage = errorData.error || "Error al subir evidencia";
+      const error = new Error(errorMessage) as any;
+      error.details = errorData.details;
+      error.code = errorData.code;
+      throw error;
+    }
+
+    const data = await response.json();
+    // Retornar comprobante_url directamente para facilitar el uso
+    return {
+      ...data,
+      comprobante_url: data.comprobante_url || data.file?.url,
+    };
   }
 
   // Sales
@@ -469,6 +528,8 @@ class ApiClient {
 
   async confirmPayment(paymentId: string, data?: {
     metadata?: Record<string, any>;
+    comprobante_url?: string; // SPRINT 4: Campo directo para comprobante
+    // Backward compatibility
     proofType?: string;
     proofReference?: string;
     proofFileUrl?: string;
@@ -483,6 +544,56 @@ class ApiClient {
     return this.request(`/payments/${paymentId}`, {
       method: "DELETE",
     });
+  }
+
+  // Reports
+  async getSalesByMethod(params?: {
+    startDate?: string;
+    endDate?: string;
+  }) {
+    const query = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          query.append(key, value);
+        }
+      });
+    }
+    const url = query.toString() 
+      ? `/reports/sales-by-method?${query.toString()}` 
+      : `/reports/sales-by-method`;
+    return this.request(url);
+  }
+
+  async getDailyCash(params?: {
+    date?: string; // YYYY-MM-DD
+  }) {
+    const query = new URLSearchParams();
+    if (params?.date) {
+      query.append("date", params.date);
+    }
+    const url = query.toString() 
+      ? `/reports/daily-cash?${query.toString()}` 
+      : `/reports/daily-cash`;
+    return this.request(url);
+  }
+
+  async getDifferences(params?: {
+    startDate?: string;
+    endDate?: string;
+  }) {
+    const query = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          query.append(key, value);
+        }
+      });
+    }
+    const url = query.toString() 
+      ? `/reports/differences?${query.toString()}` 
+      : `/reports/differences`;
+    return this.request(url);
   }
 }
 

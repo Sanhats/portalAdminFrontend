@@ -9,7 +9,7 @@ import {
   FileIcon,
   HomeIcon,
 } from "./icons/custom-icons"
-import { ShoppingBag } from "lucide-react"
+import { ShoppingBag, Calculator } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -19,10 +19,11 @@ const navigation = [
   { name: "Productos", href: "/admin/products", icon: PackageIcon },
   { name: "Categorías", href: "/admin/categories", icon: GridIcon },
   { name: "Ventas", href: "/admin/sales", icon: ShoppingBag },
+  { name: "Cierre de Caja", href: "/admin/cash-closing", icon: Calculator },
+  { name: "Reportes", href: "/admin/reports", icon: FileIcon },
   // Rutas futuras del panel admin:
   // { name: "Pedidos", href: "/admin/orders", icon: CartIcon },
   // { name: "Clientes", href: "/admin/customers", icon: UsersIcon },
-  // { name: "Reportes", href: "/admin/reports", icon: FileIcon },
 ]
 
 export function Sidebar() {
@@ -33,7 +34,7 @@ export function Sidebar() {
       <div className="flex h-full flex-col items-center py-6">
         <nav className="flex flex-1 flex-col items-center gap-3 justify-center w-full px-2">
           {navigation.map((item) => {
-            const isActive = pathname === item.href
+            const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
             const linkClasses = isActive
               ? "neu-pressed"
               : "neu-flat neu-hover neu-active"
