@@ -6,6 +6,7 @@ import Image from "next/image";
 import { api } from "@/lib/api-client";
 import { ProductGridSkeleton } from "@/components/ProductSkeleton";
 import { EmptyProducts } from "@/components/EmptyState";
+import { getProductImageUrl } from "@/lib/image-utils";
 
 interface Product {
   id: string;
@@ -52,15 +53,8 @@ export default function StoreHomeClient() {
     }
   };
 
-  const getProductImage = (product: any): string | undefined => {
-    if (product.product_images && product.product_images.length > 0) {
-      return product.product_images[0].image_url;
-    }
-    return product.image || product.imageUrl || product.image_url;
-  };
-
   const ProductCard = ({ product }: { product: Product }) => {
-    const imageUrl = getProductImage(product);
+    const imageUrl = getProductImageUrl(product);
     
     return (
       <Link

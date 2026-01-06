@@ -8,6 +8,7 @@ import { api } from "@/lib/api-client";
 import { ProductGridSkeleton } from "@/components/ProductSkeleton";
 import { EmptyCategory } from "@/components/EmptyState";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { isValidImageUrl } from "@/lib/image-utils";
 import ErrorPage from "@/components/ErrorPage";
 
 interface Product {
@@ -101,27 +102,30 @@ export default function CategoryPage() {
     loadProducts();
   }, [loadProducts]);
 
-  const ProductCard = ({ product }: { product: Product }) => (
-    <Link
-      href={`/products/${product.id}`}
-      className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow"
-    >
-      <div className="aspect-square relative bg-gray-200">
-        {product.image ? (
-          <Image
-            src={product.image}
-            alt={product.name}
-            fill
-            className="object-cover"
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
-            loading="lazy"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-gray-400">
-            Sin imagen
-          </div>
-        )}
-      </div>
+  const ProductCard = ({ product }: { product: Product }) => {
+    const imageUrl = isValidImageUrl(product.image) ? product.image : undefined;
+    
+    return (
+      <Link
+        href={`/products/${product.id}`}
+        className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow"
+      >
+        <div className="aspect-square relative bg-gray-200">
+          {imageUrl ? (
+            <Image
+              src={imageUrl}
+              alt={product.name}
+              fill
+              className="object-cover"
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+              loading="lazy"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-gray-400">
+              Sin imagen
+            </div>
+          )}
+        </div>
       <div className="p-4">
         <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2">
           {product.name}
@@ -135,8 +139,9 @@ export default function CategoryPage() {
           <p className="text-sm text-red-500 mt-1">Sin stock</p>
         )}
       </div>
-    </Link>
-  );
+      </Link>
+    );
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

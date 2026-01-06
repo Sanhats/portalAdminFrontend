@@ -73,6 +73,12 @@ class ApiClient {
         fullErrorMessage = `${errorMessage}. ${validationErrors}`;
       }
 
+      // Crear un error personalizado que preserve los detalles del backend
+      const error = new Error(fullErrorMessage) as any;
+      error.details = errorData.details;
+      error.code = errorData.code;
+      error.hint = errorData.hint;
+
       if (response.status === 401) {
         // Solo remover el token si ya existe (no en login)
         const token = this.getToken();
@@ -84,25 +90,25 @@ class ApiClient {
           }
         }
         // El backend ahora devuelve mensajes claros de autenticación
-        throw new Error(errorMessage);
+        throw error;
       }
 
       if (response.status === 400) {
         // Error de validación - el backend ahora incluye detalles útiles
-        throw new Error(fullErrorMessage);
+        throw error;
       }
 
       if (response.status === 404) {
         // El backend ahora devuelve mensajes claros de "no encontrado"
-        throw new Error(errorMessage);
+        throw error;
       }
 
       if (response.status >= 500) {
         // Error del servidor - el backend ahora incluye detalles en desarrollo
-        throw new Error(errorMessage);
+        throw error;
       }
 
-      throw new Error(fullErrorMessage);
+      throw error;
     }
 
     return response.json();
@@ -137,8 +143,11 @@ class ApiClient {
     const query = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null && value !== '') {
-          query.append(key, value.toString());
+        if (value !== undefined && value !== null) {
+          const stringValue = String(value);
+          if (stringValue) {
+            query.append(key, stringValue);
+          }
         }
       });
     }
@@ -282,8 +291,11 @@ class ApiClient {
     const query = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null && value !== '') {
-          query.append(key, value.toString());
+        if (value !== undefined && value !== null) {
+          const stringValue = String(value);
+          if (stringValue) {
+            query.append(key, stringValue);
+          }
         }
       });
     }
@@ -337,6 +349,139 @@ class ApiClient {
   async cancelSale(id: string) {
     return this.request(`/sales/${id}/cancel`, {
       method: "POST",
+    });
+  }
+
+  // Payment Methods
+  async getPaymentMethods(params?: {
+    type?: 'cash' | 'transfer' | 'qr' | 'card' | 'gateway' | 'other';
+    isActive?: boolean;
+  }) {
+    const query = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          const stringValue = String(value);
+          if (stringValue) {
+            query.append(key === 'isActive' ? 'isActive' : key, stringValue);
+          }
+        }
+      });
+    }
+    const url = query.toString() ? `/payment-methods?${query.toString()}` : '/payment-methods';
+    return this.request(url);
+  }
+
+  async createPaymentMethod(method: {
+    label: string;
+    code: string;
+    type: 'cash' | 'transfer' | 'qr' | 'card' | 'gateway' | 'other';
+    isActive?: boolean;
+    metadata?: any;
+  }) {
+    return this.request("/payment-methods", {
+      method: "POST",
+      body: JSON.stringify(method),
+    });
+  }
+
+  // Payments
+  async getSalePayments(saleId: string, params?: {
+    status?: 'pending' | 'confirmed' | 'failed' | 'refunded';
+  }) {
+    const query = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          const stringValue = String(value);
+          if (stringValue) {
+            query.append(key, stringValue);
+          }
+        }
+      });
+    }
+    const url = query.toString() 
+      ? `/sales/${saleId}/payments?${query.toString()}` 
+      : `/sales/${saleId}/payments`;
+    return this.request(url);
+  }
+
+  async createPayment(saleId: string, payment: {
+    amount: number;
+    method: 'cash' | 'transfer' | 'mp_point' | 'qr' | 'card' | 'other';
+    provider?: 'manual' | 'mercadopago' | 'banco' | 'pos'; // Se determina automáticamente si no se proporciona
+    status?: 'pending' | 'confirmed'; // Se determina automáticamente según provider
+    reference?: string;
+    metadata?: Record<string, any>;
+    // Backward compatibility
+    paymentMethodId?: string;
+    externalReference?: string;
+    gatewayMetadata?: any;
+    idempotencyKey?: string; // Para manejo de idempotencia
+  }) {
+    const token = this.getToken();
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+    
+    if (payment.idempotencyKey) {
+      headers['Idempotency-Key'] = payment.idempotencyKey;
+    }
+    
+    const url = this.useProxy 
+      ? this.getProxyUrl(`/sales/${saleId}/payments`)
+      : `${this.baseUrl}/sales/${saleId}/payments`;
+    
+    const response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payment),
+    });
+
+    // Manejo de idempotencia: 200 = ya existe, 201 = creado nuevo
+    if (response.status === 200 || response.status === 201) {
+      return response.json();
+    }
+
+    // Si no es éxito, manejar errores
+    if (!response.ok) {
+      let errorData: any;
+      try {
+        errorData = await response.json();
+      } catch {
+        errorData = { error: "Error en la solicitud" };
+      }
+
+      const errorMessage = errorData.error || "Error en la solicitud";
+      const error = new Error(errorMessage) as any;
+      error.details = errorData.details;
+      error.code = errorData.code;
+      error.hint = errorData.hint;
+      throw error;
+    }
+
+    return response.json();
+  }
+
+  async confirmPayment(paymentId: string, data?: {
+    metadata?: Record<string, any>;
+    proofType?: string;
+    proofReference?: string;
+    proofFileUrl?: string;
+  }) {
+    return this.request(`/payments/${paymentId}/confirm`, {
+      method: "PATCH",
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
+  async deletePayment(paymentId: string) {
+    return this.request(`/payments/${paymentId}`, {
+      method: "DELETE",
     });
   }
 }

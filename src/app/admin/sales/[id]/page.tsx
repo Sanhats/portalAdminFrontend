@@ -2,13 +2,34 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, XCircle, AlertTriangle, Loader2, Clock, DollarSign } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle, AlertTriangle, Loader2, Edit, Save, X, Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/api-client";
 import Notification from "@/components/Notification";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Button } from "@/components/ui/button";
-
-type SaleStatus = 'draft' | 'confirmed' | 'cancelled' | 'paid';
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { SaleFinancialCard } from "@/components/SaleFinancialCard";
+import { PaymentModal } from "@/components/PaymentModal";
+import { PaymentQRModal } from "@/components/PaymentQRModal";
+import { PaymentMercadoPagoModal } from "@/components/PaymentMercadoPagoModal";
+import { PaymentTimeline } from "@/components/PaymentTimeline";
+import { PaymentQRDisplay } from "@/components/PaymentQRDisplay";
+import { Sale, Payment, SaleStatus, PaymentStatus } from "@/types/payments";
+import { canPaySale, canDeletePayment, canConfirmPayment } from "@/lib/payment-helpers";
+import { 
+  getSaleStatusColor, 
+  getSaleStatusLabel, 
+  getSaleStatusIcon,
+  getPaymentStatusColor,
+  getPaymentStatusLabel,
+  getPaymentStatusIcon,
+  getPaymentMethodTypeLabel,
+  getPaymentMethodEnumLabel,
+  getPaymentProviderLabel,
+} from "@/lib/payment-mappings";
+import { getErrorMessage } from "@/lib/error-handler";
 
 interface SaleItem {
   id: string;
@@ -30,18 +51,7 @@ interface SaleItem {
   } | null;
 }
 
-interface Sale {
-  id: string;
-  tenant_id: string;
-  status: SaleStatus;
-  total_amount: string;
-  payment_method: string | null;
-  notes: string | null;
-  created_by: string;
-  payment_status: string | null;
-  external_reference: string | null;
-  created_at: string;
-  updated_at: string;
+interface ExtendedSale extends Sale {
   sale_items: SaleItem[];
 }
 
@@ -50,89 +60,51 @@ interface NotificationState {
   type: "success" | "error" | "info";
 }
 
-const getStatusColor = (status: SaleStatus) => {
-  switch (status) {
-    case 'draft':
-      return 'bg-gray-500/20 text-gray-300 border-gray-500/30';
-    case 'confirmed':
-      return 'bg-blue-500/20 text-blue-300 border-blue-500/30';
-    case 'paid':
-      return 'bg-green-500/20 text-green-300 border-green-500/30';
-    case 'cancelled':
-      return 'bg-red-500/20 text-red-300 border-red-500/30';
-    default:
-      return 'bg-gray-500/20 text-gray-300 border-gray-500/30';
-  }
-};
-
-const getStatusLabel = (status: SaleStatus) => {
-  switch (status) {
-    case 'draft':
-      return 'Borrador';
-    case 'confirmed':
-      return 'Confirmada';
-    case 'paid':
-      return 'Pagada';
-    case 'cancelled':
-      return 'Cancelada';
-    default:
-      return status;
-  }
-};
-
-const getStatusIcon = (status: SaleStatus) => {
-  switch (status) {
-    case 'draft':
-      return <Clock className="h-4 w-4" />;
-    case 'confirmed':
-      return <CheckCircle2 className="h-4 w-4" />;
-    case 'paid':
-      return <DollarSign className="h-4 w-4" />;
-    case 'cancelled':
-      return <XCircle className="h-4 w-4" />;
-    default:
-      return null;
-  }
-};
-
 const getPaymentMethodLabel = (method: string | null) => {
   if (!method) return 'No especificado';
-  switch (method) {
-    case 'cash':
-      return 'Efectivo';
-    case 'transfer':
-      return 'Transferencia';
-    case 'mercadopago':
-      return 'Mercado Pago';
-    case 'other':
-      return 'Otro';
-    default:
-      return method;
-  }
+  return getPaymentMethodTypeLabel(method as any);
 };
 
 export default function SaleDetailPage() {
   const params = useParams();
   const router = useRouter();
   const saleId = params.id as string;
-  const [sale, setSale] = useState<Sale | null>(null);
+  const [sale, setSale] = useState<ExtendedSale | null>(null);
   const [loading, setLoading] = useState(true);
   const [confirming, setConfirming] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [notification, setNotification] = useState<NotificationState | null>(null);
+  
+  // Estados para edición
+  const [editPaymentMethod, setEditPaymentMethod] = useState<string>('');
+  const [editNotes, setEditNotes] = useState<string>('');
+
+  // Estados para pagos
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [loadingPayments, setLoadingPayments] = useState(false);
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [showQRPaymentDialog, setShowQRPaymentDialog] = useState(false);
+  const [showMPPaymentDialog, setShowMPPaymentDialog] = useState(false);
+  const [confirmingPaymentId, setConfirmingPaymentId] = useState<string | null>(null);
+  const [showTimeline, setShowTimeline] = useState(false);
 
   const loadSale = async () => {
     if (!saleId) return;
     setLoading(true);
     try {
-      const data = await api.getSale(saleId) as Sale;
+      const data = await api.getSale(saleId) as ExtendedSale;
       setSale(data);
+      // Inicializar valores de edición
+      setEditPaymentMethod(data.payment_method || 'cash');
+      setEditNotes(data.notes || '');
     } catch (error: any) {
       console.error("Error al cargar venta:", error);
       setNotification({
-        message: error.message || "Error al cargar venta",
+        message: getErrorMessage(error),
         type: "error",
       });
     } finally {
@@ -145,12 +117,46 @@ export default function SaleDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [saleId]);
 
+  // Cargar pagos cuando la venta esté confirmada o pagada
+  useEffect(() => {
+    if (sale && canPaySale(sale)) {
+      loadPayments();
+    }
+  }, [sale?.id, sale?.status]);
+
+  const loadPayments = async () => {
+    if (!saleId) return;
+    setLoadingPayments(true);
+    try {
+      const data = await api.getSalePayments(saleId) as { payments: Payment[]; financial?: any };
+      setPayments(Array.isArray(data.payments) ? data.payments : []);
+      // Actualizar resumen financiero desde la respuesta
+      if (data.financial && sale) {
+        setSale({ ...sale, financial: data.financial });
+      }
+    } catch (error: any) {
+      console.error("Error al cargar pagos:", error);
+      setNotification({
+        message: getErrorMessage(error),
+        type: "error",
+      });
+    } finally {
+      setLoadingPayments(false);
+    }
+  };
+
+  const handlePaymentSuccess = async () => {
+    // Refrescar pagos y venta después de crear un pago
+    await loadPayments();
+    await loadSale();
+  };
+
   const handleConfirm = async () => {
     if (!sale) return;
 
     setConfirming(true);
     try {
-      const confirmedSale = await api.confirmSale(sale.id) as Sale;
+      const confirmedSale = await api.confirmSale(sale.id) as ExtendedSale;
       setSale(confirmedSale);
       setShowConfirmDialog(false);
       setNotification({
@@ -180,7 +186,7 @@ export default function SaleDetailPage() {
 
     setCancelling(true);
     try {
-      const cancelledSale = await api.cancelSale(sale.id) as Sale;
+      const cancelledSale = await api.cancelSale(sale.id) as ExtendedSale;
       setSale(cancelledSale);
       setShowCancelDialog(false);
       setNotification({
@@ -195,6 +201,113 @@ export default function SaleDetailPage() {
       });
     } finally {
       setCancelling(false);
+    }
+  };
+
+  const handleEdit = () => {
+    if (!sale) return;
+    setEditPaymentMethod(sale.payment_method || 'cash');
+    setEditNotes(sale.notes || '');
+    setEditing(true);
+  };
+
+  const handleCancelEdit = () => {
+    if (!sale) return;
+    setEditPaymentMethod(sale.payment_method || 'cash');
+    setEditNotes(sale.notes || '');
+    setEditing(false);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!sale) return;
+
+    setSaving(true);
+    try {
+      const updatedSale = await api.updateSale(sale.id, {
+        paymentMethod: editPaymentMethod as 'cash' | 'transfer' | 'mercadopago' | 'other',
+        notes: editNotes.trim() || undefined,
+      }) as ExtendedSale;
+      
+      setSale(updatedSale);
+      setEditing(false);
+      setNotification({
+        message: "Venta actualizada exitosamente",
+        type: "success",
+      });
+    } catch (error: any) {
+      console.error("Error al actualizar venta:", error);
+      setNotification({
+        message: error.message || "Error al actualizar venta",
+        type: "error",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+
+  const handleDeletePayment = async (paymentId: string) => {
+    const payment = payments.find(p => p.id === paymentId);
+    if (!payment || !canDeletePayment(payment)) {
+      setNotification({
+        message: "Solo se pueden eliminar pagos pendientes",
+        type: "error",
+      });
+      return;
+    }
+
+    if (!confirm("¿Estás seguro de que deseas eliminar este pago?")) {
+      return;
+    }
+
+    try {
+      await api.deletePayment(paymentId);
+      await loadPayments();
+      await loadSale();
+      setNotification({
+        message: "Pago eliminado exitosamente",
+        type: "success",
+      });
+    } catch (error: any) {
+      console.error("Error al eliminar pago:", error);
+      setNotification({
+        message: getErrorMessage(error),
+        type: "error",
+      });
+    }
+  };
+
+  const handleConfirmPayment = async (paymentId: string) => {
+    const payment = payments.find(p => p.id === paymentId);
+    if (!payment || !canConfirmPayment(payment)) {
+      setNotification({
+        message: "Este pago no puede ser confirmado",
+        type: "error",
+      });
+      return;
+    }
+
+    if (!confirm("¿Confirmar este pago? Esta acción no se puede deshacer.")) {
+      return;
+    }
+
+    setConfirmingPaymentId(paymentId);
+    try {
+      await api.confirmPayment(paymentId);
+      await loadPayments();
+      await loadSale();
+      setNotification({
+        message: "Pago confirmado exitosamente",
+        type: "success",
+      });
+    } catch (error: any) {
+      console.error("Error al confirmar pago:", error);
+      setNotification({
+        message: getErrorMessage(error),
+        type: "error",
+      });
+    } finally {
+      setConfirmingPaymentId(null);
     }
   };
 
@@ -255,16 +368,29 @@ export default function SaleDetailPage() {
             <h1 className="text-3xl font-bold tracking-tight text-white">Detalle de Venta</h1>
             <p className="text-white/60 mt-1">ID: {sale.id}</p>
           </div>
-          <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border ${getStatusColor(sale.status)}`}>
-            {getStatusIcon(sale.status)}
-            {getStatusLabel(sale.status)}
+          <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border ${getSaleStatusColor(sale.status)}`}>
+            {getSaleStatusIcon(sale.status)}
+            {getSaleStatusLabel(sale.status)}
           </span>
         </div>
 
         {/* Información general */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="neu-elevated border-0 rounded-2xl p-6">
-            <h3 className="text-lg font-semibold text-white mb-4">Información General</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">Información General</h3>
+              {sale.status === 'draft' && !editing && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleEdit}
+                  className="text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
+                >
+                  <Edit className="h-4 w-4 mr-1" />
+                  Editar
+                </Button>
+              )}
+            </div>
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-white/60">Fecha de creación:</span>
@@ -274,32 +400,95 @@ export default function SaleDetailPage() {
                 <span className="text-white/60">Última actualización:</span>
                 <span className="text-white">{formatDate(sale.updated_at)}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-white/60">Método de pago:</span>
-                <span className="text-white">{getPaymentMethodLabel(sale.payment_method)}</span>
-              </div>
-              {sale.notes && (
-                <div className="pt-3 border-t border-white/10">
-                  <div className="text-white/60 mb-1">Notas:</div>
-                  <div className="text-white">{sale.notes}</div>
-                </div>
+              {editing ? (
+                <>
+                  <div className="space-y-2">
+                    <Label className="text-white/80">Método de pago</Label>
+                    <Select
+                      value={editPaymentMethod}
+                      onChange={(e) => setEditPaymentMethod(e.target.value)}
+                      className="bg-white/5 border-white/10 text-white"
+                    >
+                      <option value="cash">Efectivo</option>
+                      <option value="transfer">Transferencia</option>
+                      <option value="mercadopago">Mercado Pago</option>
+                      <option value="other">Otro</option>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-white/80">Notas (opcional)</Label>
+                    <Textarea
+                      value={editNotes}
+                      onChange={(e) => setEditNotes(e.target.value)}
+                      placeholder="Agregar notas sobre la venta..."
+                      className="bg-white/5 border-white/10 text-white placeholder:text-white/40"
+                      rows={3}
+                    />
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <Button
+                      variant="ghost"
+                      onClick={handleCancelEdit}
+                      className="flex-1 text-white/60 hover:text-white hover:bg-white/10"
+                    >
+                      <X className="h-4 w-4 mr-1" />
+                      Cancelar
+                    </Button>
+                    <Button
+                      onClick={handleSaveEdit}
+                      disabled={saving}
+                      className="flex-1 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30 disabled:opacity-50"
+                    >
+                      {saving ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                          Guardando...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4 mr-1" />
+                          Guardar
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-white/60">Método de pago:</span>
+                    <span className="text-white">{getPaymentMethodLabel(sale.payment_method)}</span>
+                  </div>
+                  {sale.notes && (
+                    <div className="pt-3 border-t border-white/10">
+                      <div className="text-white/60 mb-1">Notas:</div>
+                      <div className="text-white">{sale.notes}</div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
 
-          <div className="neu-elevated border-0 rounded-2xl p-6">
-            <h3 className="text-lg font-semibold text-white mb-4">Resumen</h3>
-            <div className="space-y-3">
-              <div className="flex justify-between text-lg">
-                <span className="text-white/80">Total:</span>
-                <span className="text-2xl font-bold text-white">{formatCurrency(sale.total_amount)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-white/60">Items:</span>
-                <span className="text-white">{sale.sale_items?.length || 0}</span>
+          {sale.financial ? (
+            <SaleFinancialCard financial={sale.financial} />
+          ) : (
+            <div className="neu-elevated border-0 rounded-2xl p-6">
+              <h3 className="text-lg font-semibold text-white mb-4">Resumen Financiero</h3>
+              <div className="space-y-3">
+                <div className="flex justify-between text-lg">
+                  <span className="text-white/80">Total:</span>
+                  <span className="text-2xl font-bold text-white">
+                    {formatCurrency(sale.total_amount)}
+                  </span>
+                </div>
+                <div className="flex justify-between pt-2 border-t border-white/10">
+                  <span className="text-white/60">Items:</span>
+                  <span className="text-white">{sale.sale_items?.length || 0}</span>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Items de la venta */}
@@ -339,8 +528,190 @@ export default function SaleDetailPage() {
           </div>
         </div>
 
+        {/* Sección de Pagos - Solo para ventas confirmed o paid */}
+        {canPaySale(sale) && (
+          <div className="neu-elevated border-0 rounded-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <h3 className="text-lg font-semibold text-white">Pagos</h3>
+                {payments.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowTimeline(!showTimeline)}
+                    className="text-white/60 hover:text-white hover:bg-white/10"
+                  >
+                    {showTimeline ? 'Ocultar' : 'Ver'} Timeline
+                  </Button>
+                )}
+              </div>
+              {sale.status === 'confirmed' && !sale.financial?.isPaid && (
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => setShowMPPaymentDialog(true)}
+                    size="sm"
+                    className="bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/30"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Mercado Pago
+                  </Button>
+                  <Button
+                    onClick={() => setShowQRPaymentDialog(true)}
+                    size="sm"
+                    className="bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 border border-yellow-500/30"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Pago QR
+                  </Button>
+                  <Button
+                    onClick={() => setShowPaymentDialog(true)}
+                    size="sm"
+                    className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Pago Manual
+                  </Button>
+                </div>
+              )}
+              {sale.financial?.isPaid && (
+                <div className="text-green-400 text-sm font-medium flex items-center gap-1">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Completamente Pagada
+                </div>
+              )}
+            </div>
+
+            {loadingPayments ? (
+              <div className="text-center py-8 text-white/60">Cargando pagos...</div>
+            ) : payments.length === 0 ? (
+              <div className="text-center py-8 text-white/60">No hay pagos registrados</div>
+            ) : showTimeline ? (
+              <PaymentTimeline payments={payments} />
+            ) : (
+              <div className="space-y-3">
+                {payments.map((payment) => (
+                  <div
+                    key={payment.id}
+                    className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/10"
+                  >
+                    <div className="flex-1">
+                      {/* Estado, Método y Monto - Información principal */}
+                      <div className="flex items-center gap-3 mb-2">
+                        {/* Estado */}
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border ${getPaymentStatusColor(payment.status)}`}>
+                          {getPaymentStatusIcon(payment.status)}
+                          {getPaymentStatusLabel(payment.status)}
+                        </span>
+                        {/* Método */}
+                        <span className="text-white font-medium">
+                          {payment.method 
+                            ? getPaymentMethodEnumLabel(payment.method)
+                            : payment.payment_methods?.label || 'Sin método'}
+                        </span>
+                        {/* Provider (opcional, solo si está disponible) */}
+                        {payment.provider && (
+                          <span className="text-white/60 text-xs">
+                            ({getPaymentProviderLabel(payment.provider)})
+                          </span>
+                        )}
+                      </div>
+                      
+                      {/* Información adicional */}
+                      {payment.reference && (
+                        <div className="text-white/60 text-sm mt-1">
+                          Referencia: {payment.reference}
+                        </div>
+                      )}
+                      {payment.confirmed_at && (
+                        <div className="text-white/50 text-xs mt-1">
+                          Confirmado: {formatDate(payment.confirmed_at)}
+                          {payment.confirmed_by && ' (por usuario)'}
+                        </div>
+                      )}
+                      {!payment.confirmed_at && (
+                        <div className="text-white/50 text-xs mt-1">
+                          Creado: {formatDate(payment.created_at)}
+                        </div>
+                      )}
+                      
+                      {/* Backward compatibility - campos antiguos */}
+                      {payment.external_reference && (
+                        <div className="text-white/50 text-xs mt-1">
+                          Ref. Externa: {payment.external_reference}
+                        </div>
+                      )}
+                      {payment.last_webhook && (
+                        <div className="text-white/40 text-xs mt-1">
+                          Último webhook: {formatDate(payment.last_webhook)}
+                        </div>
+                      )}
+                      
+                      {/* Mostrar QR si es pago QR pendiente */}
+                      <PaymentQRDisplay payment={payment} />
+                      
+                      {/* Estados especiales */}
+                      {payment.status === 'failed' && (
+                        <div className="mt-2 p-2 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-300">
+                          Este pago falló o fue rechazado
+                        </div>
+                      )}
+                      {payment.status === 'refunded' && (
+                        <div className="mt-2 p-2 bg-gray-500/10 border border-gray-500/30 rounded text-xs text-gray-300">
+                          Este pago fue reembolsado
+                        </div>
+                      )}
+                      {payment.status === 'confirmed' && payment.gateway_metadata?.qr_code && (
+                        <div className="mt-2 p-2 bg-green-500/10 border border-green-500/30 rounded text-xs text-green-300">
+                          ✓ Pago confirmado (QR ya no es necesario)
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-4">
+                      {/* Monto */}
+                      <span className="text-white font-semibold text-lg">
+                        {formatCurrency(payment.amount)}
+                      </span>
+                      <div className="flex gap-2">
+                        {/* Acción: Confirmar pago */}
+                        {canConfirmPayment(payment) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleConfirmPayment(payment.id)}
+                            disabled={confirmingPaymentId === payment.id}
+                            className="text-green-400 hover:text-green-300 hover:bg-green-500/10 disabled:opacity-50"
+                          >
+                            {confirmingPaymentId === payment.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <>
+                                <CheckCircle2 className="h-4 w-4 mr-1" />
+                                Confirmar
+                              </>
+                            )}
+                          </Button>
+                        )}
+                        {canDeletePayment(payment) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeletePayment(payment.id)}
+                            className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Acciones */}
-        {sale.status === 'draft' && (
+        {sale.status === 'draft' && !editing && (
           <div className="flex gap-4">
             <Button
               onClick={() => setShowConfirmDialog(true)}
@@ -360,7 +731,7 @@ export default function SaleDetailPage() {
           </div>
         )}
 
-        {sale.status === 'confirmed' && (
+        {sale.status === 'confirmed' && !sale.financial?.isPaid && (
           <div className="flex gap-4">
             <Button
               onClick={() => setShowCancelDialog(true)}
@@ -370,6 +741,25 @@ export default function SaleDetailPage() {
               <XCircle className="h-4 w-4 mr-2" />
               Cancelar Venta
             </Button>
+          </div>
+        )}
+
+        {sale.status === 'paid' && (
+          <div className="neu-elevated border-0 rounded-2xl p-6 bg-green-500/10 border-green-500/30">
+            <div className="flex items-center justify-center gap-3 text-green-400">
+              <CheckCircle2 className="h-5 w-5" />
+              <div className="text-center">
+                <div className="font-semibold">Venta Completamente Pagada</div>
+                <div className="text-sm text-white/60 mt-1">
+                  Esta venta está completamente pagada y no puede ser cancelada ni modificada.
+                </div>
+                {sale.financial?.paymentCompletedAt && (
+                  <div className="text-xs text-white/50 mt-2">
+                    Completada el {formatDate(sale.financial.paymentCompletedAt)}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
@@ -416,6 +806,40 @@ export default function SaleDetailPage() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Modal de pago manual */}
+        {showPaymentDialog && sale.financial && (
+          <PaymentModal
+            isOpen={showPaymentDialog}
+            onClose={() => setShowPaymentDialog(false)}
+            saleId={sale.id}
+            balanceAmount={sale.financial.balanceAmount}
+            onSuccess={handlePaymentSuccess}
+            filterManualOnly={true} // Sprint FE-2: Solo métodos manuales
+          />
+        )}
+
+        {/* Modal de pago QR */}
+        {showQRPaymentDialog && sale.financial && (
+          <PaymentQRModal
+            isOpen={showQRPaymentDialog}
+            onClose={() => setShowQRPaymentDialog(false)}
+            saleId={sale.id}
+            balanceAmount={sale.financial.balanceAmount}
+            onSuccess={handlePaymentSuccess}
+          />
+        )}
+
+        {/* Modal de pago Mercado Pago */}
+        {showMPPaymentDialog && sale.financial && (
+          <PaymentMercadoPagoModal
+            isOpen={showMPPaymentDialog}
+            onClose={() => setShowMPPaymentDialog(false)}
+            saleId={sale.id}
+            balanceAmount={sale.financial.balanceAmount}
+            onSuccess={handlePaymentSuccess}
+          />
         )}
 
         {/* Diálogo de cancelación */}

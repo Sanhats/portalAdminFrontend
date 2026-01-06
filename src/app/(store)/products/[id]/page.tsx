@@ -7,6 +7,7 @@ import Image from "next/image";
 import { api } from "@/lib/api-client";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import ErrorPage from "@/components/ErrorPage";
+import { isValidImageUrl } from "@/lib/image-utils";
 
 interface Product {
   id: string;
@@ -135,40 +136,57 @@ export default function ProductDetailPage() {
         <div>
           {product.product_images && product.product_images.length > 0 ? (
             <>
-              <div className="aspect-square bg-gray-200 rounded-lg overflow-hidden mb-4 relative">
-                <Image
-                  src={selectedImage || product.product_images[0].image_url}
-                  alt={product.name}
-                  fill
-                  className="object-cover"
-                  sizes="(max-width: 1024px) 100vw, 50vw"
-                  priority
-                />
-              </div>
-              {product.product_images.length > 1 && (
-                <div className="grid grid-cols-4 gap-2">
-                  {product.product_images.map((img) => (
-                    <button
-                      key={img.id}
-                      onClick={() => setSelectedImage(img.image_url)}
-                      className={`aspect-square rounded-lg overflow-hidden border-2 relative ${
-                        selectedImage === img.image_url
-                          ? "border-blue-600"
-                          : "border-gray-200"
-                      }`}
-                    >
+              {(() => {
+                const validImages = product.product_images.filter(img => isValidImageUrl(img.image_url));
+                const firstValidImage = validImages.length > 0 ? validImages[0].image_url : null;
+                
+                if (!firstValidImage) {
+                  return (
+                    <div className="aspect-square bg-gray-200 rounded-lg flex items-center justify-center">
+                      <span className="text-gray-400">Sin imagen</span>
+                    </div>
+                  );
+                }
+                
+                return (
+                  <>
+                    <div className="aspect-square bg-gray-200 rounded-lg overflow-hidden mb-4 relative">
                       <Image
-                        src={img.image_url}
-                        alt={`${product.name} - Imagen ${img.id}`}
+                        src={selectedImage && isValidImageUrl(selectedImage) ? selectedImage : firstValidImage}
+                        alt={product.name}
                         fill
                         className="object-cover"
-                        sizes="(max-width: 1024px) 25vw, 12.5vw"
-                        loading="lazy"
+                        sizes="(max-width: 1024px) 100vw, 50vw"
+                        priority
                       />
-                    </button>
-                  ))}
-                </div>
-              )}
+                    </div>
+                    {validImages.length > 1 && (
+                      <div className="grid grid-cols-4 gap-2">
+                        {validImages.map((img) => (
+                          <button
+                            key={img.id}
+                            onClick={() => setSelectedImage(img.image_url)}
+                            className={`aspect-square rounded-lg overflow-hidden border-2 relative ${
+                              selectedImage === img.image_url
+                                ? "border-blue-600"
+                                : "border-gray-200"
+                            }`}
+                          >
+                            <Image
+                              src={img.image_url}
+                              alt={`${product.name} - Imagen ${img.id}`}
+                              fill
+                              className="object-cover"
+                              sizes="(max-width: 1024px) 25vw, 12.5vw"
+                              loading="lazy"
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </>
           ) : (
             <div className="aspect-square bg-gray-200 rounded-lg flex items-center justify-center text-gray-400">
