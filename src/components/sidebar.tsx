@@ -9,7 +9,7 @@ import {
   FileIcon,
   HomeIcon,
 } from "./icons/custom-icons"
-import { ShoppingBag, Calculator } from "lucide-react"
+import { ShoppingBag, Calculator, Wallet } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -19,6 +19,7 @@ const navigation = [
   { name: "Productos", href: "/admin/products", icon: PackageIcon },
   { name: "Categorías", href: "/admin/categories", icon: GridIcon },
   { name: "Ventas", href: "/admin/sales", icon: ShoppingBag },
+  { name: "Contabilidad", href: "/admin/accounting", icon: Wallet },
   { name: "Cierre de Caja", href: "/admin/cash-closing", icon: Calculator },
   { name: "Reportes", href: "/admin/reports", icon: FileIcon },
   // Rutas futuras del panel admin:

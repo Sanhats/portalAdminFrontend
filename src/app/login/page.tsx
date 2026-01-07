@@ -1,23 +1,25 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api-client";
 import { isAuthenticated } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Si ya está autenticado, redirigir al admin
+    // Si ya está autenticado, redirigir al admin o a la URL de retorno
     if (isAuthenticated()) {
-      router.push("/admin");
+      const returnUrl = searchParams.get("returnUrl");
+      router.push(returnUrl || "/admin");
     }
-  }, [router]);
+  }, [router, searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,8 +28,9 @@ export default function LoginPage() {
 
     try {
       await api.login(email, password);
-      // Redirigir al admin después del login exitoso
-      router.push("/admin");
+      // Redirigir a la URL de retorno o al admin por defecto
+      const returnUrl = searchParams.get("returnUrl");
+      router.push(returnUrl || "/admin");
     } catch (err: any) {
       setError(err.message || "Error al iniciar sesión");
     } finally {

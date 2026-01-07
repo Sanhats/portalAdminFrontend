@@ -595,6 +595,95 @@ class ApiClient {
       : `/reports/differences`;
     return this.request(url);
   }
+
+  // Cash Box (Contabilidad)
+  async getCashBoxes(params?: {
+    tenantId?: string;
+    page?: number;
+    limit?: number;
+    status?: 'open' | 'closed';
+    dateFrom?: string;
+    dateTo?: string;
+  }) {
+    const query = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          query.append(key, String(value));
+        }
+      });
+    }
+    const url = query.toString() 
+      ? `/cash-boxes?${query.toString()}` 
+      : `/cash-boxes`;
+    return this.request(url);
+  }
+
+  async getCashBox(id: string) {
+    return this.request(`/cash-boxes/${id}`);
+  }
+
+  async openCashBox(data: { date: string; openingBalance: number | string }) {
+    return this.request("/cash-boxes", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async closeCashBox(id: string) {
+    return this.request(`/cash-boxes/${id}/close`, {
+      method: "PATCH",
+    });
+  }
+
+  async getCashBoxMovements(cashBoxId: string, params?: {
+    page?: number;
+    limit?: number;
+    type?: 'income' | 'expense';
+    paymentMethod?: 'cash' | 'transfer';
+  }) {
+    const query = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          query.append(key, String(value));
+        }
+      });
+    }
+    const url = query.toString() 
+      ? `/cash-boxes/${cashBoxId}/movements?${query.toString()}` 
+      : `/cash-boxes/${cashBoxId}/movements`;
+    return this.request(url);
+  }
+
+  async createCashMovement(cashBoxId: string, data: {
+    type: 'income' | 'expense';
+    amount: number | string;
+    paymentMethod: 'cash' | 'transfer';
+    reference?: string;
+  }) {
+    return this.request(`/cash-boxes/${cashBoxId}/movements`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getPendingPayments(params?: {
+    tenantId?: string;
+  }) {
+    const query = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          query.append(key, String(value));
+        }
+      });
+    }
+    const url = query.toString() 
+      ? `/cash-boxes/pending-payments?${query.toString()}` 
+      : `/cash-boxes/pending-payments`;
+    return this.request(url);
+  }
 }
 
 export const api = new ApiClient(process.env.NEXT_PUBLIC_API_URL!);
