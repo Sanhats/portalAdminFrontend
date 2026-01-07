@@ -153,7 +153,8 @@ export default function MovementsPage() {
     if (cashBoxId) {
       loadMovements(cashBoxId);
     }
-  }, [cashBoxId, page, filters.type, filters.paymentMethod, loadMovements]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cashBoxId, page, filters.type, filters.paymentMethod]);
 
   const handleCreateMovement = async () => {
     if (!cashBoxId) {
